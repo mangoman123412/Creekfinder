@@ -1,0 +1,46 @@
+name: Build Android app (APK)
+# Builds an installable Android APK with no app store and no Expo account.
+# Run it: GitHub -> Actions -> "Build Android app (APK)" -> Run workflow. Download the APK from the run's Artifacts.
+# Push a tag like v2.0.0 to also publish it on the repo's Releases page.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck && npm test
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          EXPO_PUBLIC_UNLOCK_ALL: '1'
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_MAPTILER_KEY: ${{ vars.EXPO_PUBLIC_MAPTILER_KEY }}
+      - name: Build release APK
+        working-directory: android
+        run: |
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> gradle.properties
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+        env:
+          EXPO_PUBLIC_UNLOCK_ALL: '1'
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_MAPTILER_KEY: ${{ vars.EXPO_PUBLIC_MAPTILER_KEY }}
+      - run: cp android/app/build/outputs/apk/release/app-release.apk CreekFinder.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: CreekFinder-android-apk, path: CreekFinder.apk }
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with: { files: CreekFinder.apk }
