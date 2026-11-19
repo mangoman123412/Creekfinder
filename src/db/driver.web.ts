@@ -55,8 +55,9 @@ class WebDb implements Db {
 }
 
 export async function openDb(): Promise<Db> {
-  await loadScript('/vendor/sql-wasm.js');
-  const SQL = await (window as any).initSqlJs({ locateFile: (f: string) => `/vendor/${f}` });
+  const base = (window as any).__BASE__ ?? '';
+  await loadScript(`${base}/vendor/sql-wasm.js`);
+  const SQL = await (window as any).initSqlJs({ locateFile: (f: string) => `${base}/vendor/${f}` });
   let saved: Uint8Array | null = null;
   try { saved = await idbGet(); } catch {}
   try { await navigator.storage?.persist?.(); } catch {}

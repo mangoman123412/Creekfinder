@@ -4,7 +4,8 @@
 const APP = 'cf-app-v1';
 const TILES = 'cf-tiles-v1';
 const MAX_TILES = 3000;
-const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/vendor/maplibre-gl.js', '/vendor/maplibre-gl.css', '/vendor/sql-wasm.js', '/vendor/sql-wasm.wasm'];
+const B = '%BASE%';
+const SHELL = [B + '/', B + '/manifest.webmanifest', B + '/icon-192.png', B + '/vendor/maplibre-gl.js', B + '/vendor/maplibre-gl.css', B + '/vendor/sql-wasm.js', B + '/vendor/sql-wasm.wasm'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(APP).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => ![APP, TILES].includes(k)).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -35,7 +36,7 @@ self.addEventListener('fetch', (e) => {
       if (res.ok) c.put(req, res.clone());
       return res;
     } catch {
-      return (await c.match(req)) || (req.mode === 'navigate' ? await c.match('/') : undefined) || Response.error();
+      return (await c.match(req)) || (req.mode === 'navigate' ? await c.match(B + '/') : undefined) || Response.error();
     }
   })());
 });

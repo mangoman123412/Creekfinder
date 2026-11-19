@@ -62,7 +62,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "assets": "node scripts/make-assets.mjs",
-    "prebuild": "expo prebuild --clean"
+    "prebuild": "expo prebuild --clean",
+    "build:web": "node scripts/build-web.mjs"
   },
   "private": true
 }

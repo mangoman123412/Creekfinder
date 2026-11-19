@@ -85,7 +85,7 @@ const config: ExpoConfig = {
     ['expo-build-properties', { android: { minSdkVersion: 24 }, ios: { deploymentTarget: '16.4' } }],
   ],
   web: { bundler: 'metro', output: 'single', favicon: './assets/favicon.png', name: 'CreekFinder', shortName: 'CreekFinder', themeColor: '#1F4D3A', backgroundColor: '#1F4D3A' },
-  experiments: { typedRoutes: true },
+  experiments: { typedRoutes: true, ...(process.env.EXPO_BASE_URL ? { baseUrl: process.env.EXPO_BASE_URL } : {}) },
   extra: {
     eas: { projectId: process.env.EAS_PROJECT_ID ?? '' },
   },

@@ -13,3 +13,5 @@ dist
 *.mobileprovision
 supabase/.temp
 google-play-service-account.json
+dist
+creekfinder-web.zip

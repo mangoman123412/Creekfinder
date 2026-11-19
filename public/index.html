@@ -10,18 +10,19 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="CreekFinder" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="icon" href="/favicon.ico" />
-    <link rel="stylesheet" href="/vendor/maplibre-gl.css" />
-    <script src="/vendor/maplibre-gl.js"></script>
+    <link rel="manifest" href="%BASE%/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="%BASE%/apple-touch-icon.png" />
+    <link rel="icon" href="%BASE%/favicon.ico" />
+    <link rel="stylesheet" href="%BASE%/vendor/maplibre-gl.css" />
+    <script src="%BASE%/vendor/maplibre-gl.js"></script>
     <style id="expo-reset">
       html, body { height: 100%; background: #F5F1E8; overscroll-behavior: none; }
       body { overflow: hidden; -webkit-tap-highlight-color: transparent; }
       #root { display: flex; height: 100%; flex: 1; }
     </style>
     <script>
-      if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+      window.__BASE__ = '%BASE%';
+      if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('%BASE%/sw.js', { scope: '%BASE%/' }).catch(function () {}); });
     </script>
   </head>
   <body>
