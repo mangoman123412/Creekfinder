@@ -39,3 +39,7 @@ export function removeLocalFile(uri: string | null) {
   if (!uri) return;
   try { const f = new File(uri); if (f.exists) f.delete(); } catch {}
 }
+
+export async function readBytes(uri: string): Promise<Uint8Array> {
+  return new File(uri).bytes();
+}

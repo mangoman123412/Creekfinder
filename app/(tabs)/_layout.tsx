@@ -11,7 +11,7 @@ const tab = (name: string, title: string, icon: N, iconOff: N) => (
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={{ headerShown: false,
         tabBarActiveTintColor: colors.forest, tabBarInactiveTintColor: '#8A958F', tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         tabBarStyle: { backgroundColor: colors.white, borderTopColor: colors.line, height: 62, paddingBottom: 6, paddingTop: 4 },
         headerStyle: { backgroundColor: colors.sand }, headerShadowVisible: false, headerTitleStyle: { fontWeight: '800', color: colors.ink }, sceneStyle: { backgroundColor: colors.sand },

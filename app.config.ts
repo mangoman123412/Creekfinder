@@ -84,6 +84,7 @@ const config: ExpoConfig = {
     '@maplibre/maplibre-react-native',
     ['expo-build-properties', { android: { minSdkVersion: 24 }, ios: { deploymentTarget: '16.4' } }],
   ],
+  web: { bundler: 'metro', output: 'single', favicon: './assets/favicon.png', name: 'CreekFinder', shortName: 'CreekFinder', themeColor: '#1F4D3A', backgroundColor: '#1F4D3A' },
   experiments: { typedRoutes: true },
   extra: {
     eas: { projectId: process.env.EAS_PROJECT_ID ?? '' },

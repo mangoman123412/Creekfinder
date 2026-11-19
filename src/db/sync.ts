@@ -1,7 +1,6 @@
-import { File } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { getDb, kvGet, kvSet, notifyDb, getTrackPoints } from './local';
-import { removeLocalFile } from '../lib/photos';
+import { removeLocalFile, readBytes } from '../lib/photos';
 
 export interface SyncResult { pushed: number; pulled: number; errors: string[] }
 
@@ -67,7 +66,7 @@ async function doSync(uid: string): Promise<SyncResult> {
       let path = ph.storage_path as string | null;
       if (!path) {
         if (!ph.local_uri) continue;
-        const bytes = await new File(ph.local_uri).bytes();
+        const bytes = await readBytes(ph.local_uri);
         path = `${uid}/${ph.id}.jpg`;
         const up = await supabase.storage.from('photos').upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
         if (up.error) throw up.error;

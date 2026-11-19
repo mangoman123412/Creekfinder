@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert } from '../src/lib/alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { CreekMap } from '../src/components/CreekMap';
@@ -32,7 +33,11 @@ export default function Track() {
   const adv = useDbQuery(() => (activeId.data ? getAdventure(activeId.data) : Promise.resolve(null)), [activeId.data], null);
   const pts = useDbQuery(() => (activeId.data ? getTrackPoints(activeId.data) : Promise.resolve([])), [activeId.data], []);
   const recording = !!activeId.data && !!adv.data;
-  useKeepAwake(recording ? 'tracking' : undefined);
+  useEffect(() => {
+    if (!recording) return;
+    activateKeepAwakeAsync('tracking').catch(() => {});
+    return () => { deactivateKeepAwake('tracking').catch(() => {}); };
+  }, [recording]);
 
   useEffect(() => {
     let off: (() => void) | undefined;

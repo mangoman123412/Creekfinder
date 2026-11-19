@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Dimensions, FlatList, ScrollView, Text, View } from 'react-native';
+import { Dimensions, FlatList, Platform, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../../src/lib/alert';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -41,6 +42,12 @@ export default function AdventureDetail() {
   const exportGpx = async () => {
     try {
       const gpx = toGPX(a.name, pts.data);
+      if (Platform.OS === 'web') {
+        const url = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
+        const el = document.createElement('a'); el.href = url; el.download = `${a.name.replace(/[^\w\- ]+/g, '').trim() || 'adventure'}.gpx`; el.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        return;
+      }
       const dir = new Directory(Paths.cache, 'exports'); if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
       const f = new File(dir, `${a.name.replace(/[^\w\- ]+/g, '').trim() || 'adventure'}.gpx`);
       f.write(gpx);

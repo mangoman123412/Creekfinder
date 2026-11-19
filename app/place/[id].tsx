@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, FlatList, ScrollView, Switch, Text, View } from 'react-native';
+import { Dimensions, FlatList, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert } from '../../src/lib/alert';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';

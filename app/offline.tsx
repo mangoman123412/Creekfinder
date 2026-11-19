@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../src/lib/alert';
 import { useRouter } from 'expo-router';
 import { OfflineManager, type OfflinePack, type OfflinePackStatus } from '@maplibre/maplibre-react-native';
 import { Banner, Button, Card, Chip, SectionTitle } from '../src/components/ui';

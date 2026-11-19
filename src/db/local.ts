@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite';
+import { openDb, type Db } from './driver';
 import * as Crypto from 'expo-crypto';
 import type { Adventure, Folder, Photo, Place, TrackPoint } from '../types';
 import { pathLength, elevationGain, haversine } from '../lib/geo';
@@ -8,7 +8,7 @@ import { pathLength, elevationGain, haversine } from '../lib/geo';
  * flagged `dirty`, and pushed to Supabase by src/db/sync.ts whenever a connection + account exist.
  */
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let dbPromise: Promise<Db> | null = null;
 
 export const newId = () => Crypto.randomUUID();
 export const nowIso = () => new Date().toISOString();
@@ -49,10 +49,10 @@ CREATE TABLE IF NOT EXISTS track_points (
 );
 `;
 
-export function getDb(): Promise<SQLite.SQLiteDatabase> {
+export function getDb(): Promise<Db> {
   if (!dbPromise) {
     dbPromise = (async () => {
-      const db = await SQLite.openDatabaseAsync('creekfinder.db');
+      const db = await openDb();
       await db.execAsync(SCHEMA);
       await ensureDefaultFolders(db);
       return db;
@@ -92,7 +92,7 @@ export const DEFAULT_FOLDERS = [
   { key: 'camping', name: 'Camping Spots', icon: 'bonfire' },
 ];
 
-async function ensureDefaultFolders(db: SQLite.SQLiteDatabase) {
+async function ensureDefaultFolders(db: Db) {
   const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key='folders_seeded'");
   if (done) return;
   const t = nowIso();

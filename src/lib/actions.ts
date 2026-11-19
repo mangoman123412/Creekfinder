@@ -1,4 +1,5 @@
-import { Alert, Linking, Platform, Share } from 'react-native';
+import { Linking, Platform, Share } from 'react-native';
+import { Alert } from './alert';
 import * as Clipboard from 'expo-clipboard';
 import { countPlaces } from '../db/local';
 import { FREE_PLACE_LIMIT } from '../config';
@@ -21,6 +22,13 @@ export async function shareLocation(name: string, lat: number, lng: number, emer
   const msg = emergency
     ? `I need help / this is my location.\n${formatCoords(lat, lng, 6)}\n${formatDMS(lat, lng)}\nGoogle Maps: ${maps}\nApple Maps: ${apple}\n(Sent from CreekFinder at ${new Date().toLocaleString()})`
     : `${name}\n${formatCoords(lat, lng, 6)}\nGoogle Maps: ${maps}\nApple Maps: ${apple}`;
+  if (Platform.OS === 'web') {
+    const nav: any = navigator;
+    if (nav.share) { try { await nav.share({ title: name, text: msg }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
+    await Clipboard.setStringAsync(msg);
+    Alert.alert('Copied', 'Your location details were copied. Paste them into a message to send.');
+    return;
+  }
   await Share.share(Platform.OS === 'ios' ? { message: msg } : { message: msg, title: name });
 }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, ScrollView, Text, View } from 'react-native';
+import { Linking, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../src/lib/alert';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Banner, Button, Card, SectionTitle } from '../src/components/ui';
 import { SourceBadge } from '../src/components/Bits';

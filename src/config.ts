@@ -1,14 +1,13 @@
-const env = process.env;
-
 export const config = {
-  supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL ?? '',
-  supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
-  maptilerKey: env.EXPO_PUBLIC_MAPTILER_KEY ?? '',
-  rcIosKey: env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '',
-  rcAndroidKey: env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '',
-  privacyUrl: env.EXPO_PUBLIC_PRIVACY_URL ?? '',
-  termsUrl: env.EXPO_PUBLIC_TERMS_URL ?? '',
-  supportEmail: env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '',
+  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
+  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+  maptilerKey: process.env.EXPO_PUBLIC_MAPTILER_KEY ?? '',
+  rcIosKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '',
+  rcAndroidKey: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '',
+  privacyUrl: process.env.EXPO_PUBLIC_PRIVACY_URL ?? '',
+  termsUrl: process.env.EXPO_PUBLIC_TERMS_URL ?? '',
+  supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '',
+  unlockAll: process.env.EXPO_PUBLIC_UNLOCK_ALL === '1',
   userAgent: 'CreekFinder/1.0 (mobile app)',
 };
 

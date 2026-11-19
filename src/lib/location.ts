@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
+import { Alert } from './alert';
 
 export interface Fix { lat: number; lng: number; accuracy: number | null; altitude: number | null; heading: number | null; ts: number }
 
@@ -10,7 +11,10 @@ export async function ensureForegroundPermission(): Promise<boolean> {
   return (await Location.requestForegroundPermissionsAsync()).granted;
 }
 
-export const openSettings = () => Linking.openSettings();
+export const openSettings = () => {
+  if (Platform.OS === 'web') { Alert.alert('Location settings', 'Open your browser or phone settings, find this site (or the CreekFinder Home Screen app), and allow Location.'); return; }
+  void Linking.openSettings();
+};
 
 const toFix = (l: Location.LocationObject): Fix => ({
   lat: l.coords.latitude, lng: l.coords.longitude, accuracy: l.coords.accuracy, altitude: l.coords.altitude, heading: l.coords.heading, ts: l.timestamp,
@@ -19,8 +23,12 @@ const toFix = (l: Location.LocationObject): Fix => ({
 export async function lastKnown(): Promise<Fix | null> {
   try {
     const l = await Location.getLastKnownPositionAsync();
-    return l ? toFix(l) : null;
-  } catch { return null; }
+    if (l) return toFix(l);
+  } catch {}
+  if (Platform.OS === 'web') { // browsers have no cached position: ask for one
+    try { return toFix(await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })); } catch {}
+  }
+  return null;
 }
 
 /**

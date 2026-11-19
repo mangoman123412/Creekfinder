@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, FlatList, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert } from '../../src/lib/alert';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Banner, Button, Card, SectionTitle, Stars, Row } from '../../src/components/ui';

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Linking, ScrollView, Switch, Text, View } from 'react-native';
+import { Linking, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert } from '../../src/lib/alert';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';

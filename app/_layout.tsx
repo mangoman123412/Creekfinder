@@ -9,6 +9,7 @@ import { AppProvider, useApp } from '../src/state/app';
 import { getDb } from '../src/db/local';
 import { resumeIfNeeded } from '../src/lib/tracking';
 import { colors } from '../src/theme';
+import { AlertHost } from '../src/components/AlertHost';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -48,6 +49,7 @@ export default function Root() {
       <SafeAreaProvider>
         <AppProvider>
           <Gate />
+          <AlertHost />
         </AppProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

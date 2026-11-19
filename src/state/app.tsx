@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { hasBackend } from '../config';
+import { hasBackend, config } from '../config';
 import { subscribeDb, wipeLocal, kvGet, kvSet } from '../db/local';
 import { syncNow, pendingCount } from '../db/sync';
 import { billingLogin, currentPremium, onPremiumChange, billingConfigured } from '../lib/entitlements';
@@ -107,7 +107,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const refreshPremium = useCallback(async () => { setStorePremium(await currentPremium()); }, []);
   const setImperial = (v: boolean) => { setImperialState(v); void kvSet('imperial', v ? '1' : '0'); };
 
-  const premium = storePremium || serverPremium || (__DEV__ && devPremium);
+  const premium = config.unlockAll || storePremium || serverPremium || (__DEV__ && devPremium);
   const value = useMemo<Ctx>(() => ({
     user: session?.user ?? null, ready, online, premium, syncing, pending, lastSyncError: err, placeLimit: premium ? Infinity : FREE_PLACE_LIMIT,
     imperial, setImperial, displayName, sync, signOut, refreshPremium, devPremium, setDevPremium,
