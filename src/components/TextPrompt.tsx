@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, TextInput, View } from 'react-native';
+import { Text } from './ui';
 import { Button } from './ui';
 import { colors, font, radius, space } from '../theme';
 
@@ -13,7 +14,7 @@ export function TextPrompt({ visible, title, initial, placeholder, confirmLabel 
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: space.xl }}>
         <Pressable style={{ position: 'absolute', inset: 0 }} onPress={onCancel} />
-        <View style={{ backgroundColor: '#fff', borderRadius: radius.lg, padding: space.lg }}>
+        <View style={{ backgroundColor: colors.surface, borderRadius: radius.lg, padding: space.lg }}>
           <Text style={font.h2}>{title}</Text>
           <TextInput autoFocus value={v} onChangeText={setV} placeholder={placeholder} maxLength={80} style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 12, fontSize: 16, marginVertical: space.md }} />
           <View style={{ flexDirection: 'row', gap: 10 }}>

@@ -6,16 +6,16 @@ import type { MapStyleKey } from '../types';
  *  - With a MapTiler key:  Standard = streets, Satellite = hybrid imagery + labels, Terrain = outdoor (topo contours, trails, hillshade).
  *  - Without a key: Standard falls back to OpenFreeMap (free, keyless, OpenStreetMap data); satellite/terrain are unavailable.
  */
-export function styleUrl(key: MapStyleKey): string {
+export function styleUrl(key: MapStyleKey, dark = false): string {
   if (hasMapTiler) {
     const k = config.maptilerKey;
     switch (key) {
       case 'satellite': return `https://api.maptiler.com/maps/hybrid/style.json?key=${k}`;
       case 'terrain': return `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${k}`;
-      default: return `https://api.maptiler.com/maps/streets-v2/style.json?key=${k}`;
+      default: return `https://api.maptiler.com/maps/${dark ? 'streets-v2-dark' : 'streets-v2'}/style.json?key=${k}`;
     }
   }
-  return 'https://tiles.openfreemap.org/styles/liberty';
+  return dark ? 'https://tiles.openfreemap.org/styles/dark' : 'https://tiles.openfreemap.org/styles/liberty';
 }
 
 export const STYLE_OPTIONS: { key: MapStyleKey; label: string; icon: string; premium: boolean }[] = [

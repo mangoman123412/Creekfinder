@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Linking, Platform, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, ScrollView, View } from 'react-native';
+import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Field } from '../src/components/ui';

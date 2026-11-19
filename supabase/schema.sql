@@ -300,3 +300,15 @@ create policy photos_obj_public_read on storage.objects for select to authentica
     select 1 from public.photos ph join public.places p on p.id = ph.place_id
     where ph.storage_path = storage.objects.name and ph.deleted_at is null
       and p.visibility = 'public' and p.deleted_at is null and p.hidden = false));
+
+-- ================================================================ v2: explorer photo contributions
+-- Any signed-in user may add photos to a PUBLIC place (their own file, under their own folder).
+-- They can always delete their own photos; place owners cannot edit other people's photos; reports go through moderation.
+drop policy if exists photos_contrib_insert on public.photos;
+create policy photos_contrib_insert on public.photos for insert to authenticated with check (
+  user_id = auth.uid() and exists (select 1 from public.places p where p.id = place_id
+    and p.visibility = 'public' and p.deleted_at is null and p.hidden = false));
+-- (photos_owner already lets users update/delete their own rows; photos_public_read already lets everyone read photos of public places.)
+
+-- Photo reports
+alter table public.reports add column if not exists photo_id uuid references public.photos(id) on delete cascade;

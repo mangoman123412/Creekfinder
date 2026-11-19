@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, View } from 'react-native';
+import { Text } from '../src/components/ui';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip, Empty, Button } from '../src/components/ui';
@@ -38,7 +39,7 @@ export default function Adventures() {
         <FlatList contentContainerStyle={{ padding: space.lg, flexGrow: 1 }} data={finished} keyExtractor={(a) => a.id}
           ListEmptyComponent={<Empty icon="footsteps" title="No adventures yet" body="Start tracking on your next outing and your trail will be saved here — even with no signal." action={<Button small title="Start tracking" onPress={() => router.replace('/track')} />} />}
           renderItem={({ item }) => (
-            <Pressable onPress={() => router.push({ pathname: '/adventure/[id]', params: { id: item.id } })} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Pressable onPress={() => router.push({ pathname: '/adventure/[id]', params: { id: item.id } })} style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <Ionicons name="footsteps" size={26} color={colors.forest} />
               <View style={{ flex: 1 }}>
                 <Text style={font.h3}>{item.name}</Text>

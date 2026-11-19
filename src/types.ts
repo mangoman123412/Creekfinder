@@ -93,6 +93,11 @@ export interface ExploreItem {
   author?: string | null;
   avg_rating?: number | null;
   rating_count?: number;
+  photo?: { url: string; credit: string; pageUrl: string; license: string } | null;
+  town?: string | null;
+  townDist?: number | null;
+  created_at?: string;
+  tags?: Record<string, string>;
 }
 
 export type MapStyleKey = 'standard' | 'satellite' | 'terrain';

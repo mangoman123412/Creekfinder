@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import { FREE_ADVENTURE_LIMIT } from '../src/config';
 import { colors, radius, shadow, space } from '../src/theme';
 
 export default function Track() {
+  const s = getS();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { imperial, premium } = useApp();
@@ -110,8 +112,8 @@ export default function Track() {
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <View style={{ alignItems: 'center' }}><Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink, fontVariant: ['tabular-nums'] }}>{value}</Text><Text style={{ fontSize: 12, color: colors.muted, fontWeight: '700' }}>{label.toUpperCase()}</Text></View>
 );
-const s = StyleSheet.create({
-  panel: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#fff', padding: space.lg, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadow },
+const getS = () => StyleSheet.create({
+  panel: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, padding: space.lg, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadow.float },
   note: { color: colors.muted, fontSize: 12.5, textAlign: 'center', marginTop: 4 },
-  back: { position: 'absolute', right: 14, width: 42, height: 42, borderRadius: radius.pill, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...shadow },
+  back: { position: 'absolute', right: 14, width: 42, height: 42, borderRadius: radius.pill, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
 });

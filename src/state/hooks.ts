@@ -41,3 +41,15 @@ export function usePhotoUris(photos: Photo[]): Record<string, string> {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return map;
 }
+
+/** Run an async loader and track loading/error. Reruns when deps change. */
+export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | null; loading: boolean; error: boolean } {
+  const [state, setState] = useState<{ data: T | null; loading: boolean; error: boolean }>({ data: null, loading: true, error: false });
+  useEffect(() => {
+    let live = true;
+    setState((s) => ({ ...s, loading: true, error: false }));
+    fn().then((d) => { if (live) setState({ data: d, loading: false, error: false }); }).catch(() => { if (live) setState({ data: null, loading: false, error: true }); });
+    return () => { live = false; };
+  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  return state;
+}

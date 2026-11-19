@@ -1,5 +1,6 @@
 import React from 'react';
-import { ScrollView, Text } from 'react-native';
+import { ScrollView } from 'react-native';
+import { Text } from '../src/components/ui';
 import { Banner } from '../src/components/ui';
 import { colors, font, space } from '../src/theme';
 

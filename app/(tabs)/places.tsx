@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Alert } from '../../src/lib/alert';
+import { FlatList, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Chip, Empty, Button } from '../../src/components/ui';
-import { PlaceRow, SaveCreekButton } from '../../src/components/Bits';
+import { Alert } from '../../src/lib/alert';
+import { Chip, Empty, Pressy, Text } from '../../src/components/ui';
+import { PlaceRow } from '../../src/components/Bits';
 import { TextPrompt } from '../../src/components/TextPrompt';
 import { useDbQuery, usePhotoUris } from '../../src/state/hooks';
 import { createFolder, deleteFolder, firstPhotos, listFolders, listPlaces, renameFolder } from '../../src/db/local';
@@ -13,70 +13,67 @@ import { useApp } from '../../src/state/app';
 import { canSaveMore } from '../../src/lib/actions';
 import { lastKnown } from '../../src/lib/location';
 import { haversine } from '../../src/lib/geo';
-import { colors, font, radius, space } from '../../src/theme';
+import { guideHref } from '../../src/lib/nav';
+import { colors, font, shadow } from '../../src/theme';
 
 export default function MyPlaces() {
   const router = useRouter();
   const { premium, imperial } = useApp();
-  const [folder, setFolder] = useState<string | null>(null);   // null = all, 'none' = unfiled
+  const [folder, setFolder] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [prompt, setPrompt] = useState<null | { mode: 'new' } | { mode: 'rename'; id: string; name: string }>(null);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
 
   const folders = useDbQuery(listFolders, [], []);
   const places = useDbQuery(() => listPlaces({ folderId: folder, search }), [folder, search], []);
+  const all = useDbQuery(() => listPlaces(), [], []);
   const photos = useDbQuery(firstPhotos, [], {});
   const uris = usePhotoUris(Object.values(photos.data));
   useEffect(() => { void lastKnown().then(setMe); }, []);
 
-  const data = useMemo(() => {
-    const arr = [...places.data];
-    if (me) arr.sort((a, b) => haversine(me, a) - haversine(me, b));
-    return arr;
-  }, [places.data, me]);
-
+  const data = useMemo(() => { const a = [...places.data]; if (me) a.sort((x, y) => haversine(me, x) - haversine(me, y)); return a; }, [places.data, me]);
   const current = folders.data.find((f) => f.id === folder);
   const manage = () => {
     if (!current) return;
     Alert.alert(current.name, undefined, [
       { text: 'Rename', onPress: () => setPrompt({ mode: 'rename', id: current.id, name: current.name }) },
-      { text: 'Delete folder', style: 'destructive', onPress: () => Alert.alert('Delete folder?', 'Places inside are kept and become unfiled.', [
-        { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { await deleteFolder(current.id); setFolder(null); } }]) },
+      { text: 'Delete folder', style: 'destructive', onPress: () => Alert.alert('Delete folder?', 'Places inside are kept and become unfiled.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { await deleteFolder(current.id); setFolder(null); } }]) },
       { text: 'Cancel', style: 'cancel' }]);
   };
+  const add = async () => { if (await canSaveMore(premium, router.push)) router.push('/save'); };
+  const pubCount = all.data.filter((p) => p.visibility === 'public').length;
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.sand }}>
-      <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
-        <Text style={font.h1}>My Places</Text>
-        <View style={s.search}>
-          <Ionicons name="search" size={18} color={colors.muted} />
-          <TextInput value={search} onChangeText={setSearch} placeholder="Search my creeks and notes" style={{ flex: 1, fontSize: 16 }} returnKeyType="search" clearButtonMode="while-editing" />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: 18, paddingTop: 10 }}>
+        <Text style={font.display}>My Places</Text>
+        <Text style={[font.small, { marginTop: 2 }]}>{all.data.length} saved{premium ? '' : ' of 25'} · {pubCount} shared · {folders.data.length} folders</Text>
+        <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, borderRadius: 26, paddingHorizontal: 16, height: 50, marginTop: 14 }, shadow.soft]}>
+          <Ionicons name="search" size={19} color={colors.muted} />
+          <TextInput value={search} onChangeText={setSearch} placeholder="Search names and notes" placeholderTextColor={colors.faint} style={{ flex: 1, fontSize: 15.5, color: colors.ink, fontFamily: 'Inter_600SemiBold' }} returnKeyType="search" />
         </View>
-        <FlatList horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10, flexGrow: 0 }} data={[{ id: '__all' }, ...folders.data, { id: '__none' }, { id: '__new' }] as any[]}
-          keyExtractor={(i) => i.id}
+        <FlatList horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12, flexGrow: 0 }} data={[{ id: '__all' }, ...folders.data, { id: '__none' }, { id: '__new' }] as any[]} keyExtractor={(i) => i.id}
           renderItem={({ item }) => item.id === '__all' ? <Chip label="All" active={folder == null} onPress={() => setFolder(null)} />
             : item.id === '__none' ? <Chip label="Unfiled" active={folder === 'none'} onPress={() => setFolder('none')} />
             : item.id === '__new' ? <Chip label="New folder" icon="add" onPress={() => setPrompt({ mode: 'new' })} />
             : <Chip label={item.name} icon={item.icon} active={folder === item.id} onPress={() => setFolder(item.id)} />} />
-        {current && <Pressable onPress={manage} style={{ alignSelf: 'flex-start', marginTop: 6 }}><Text style={{ color: colors.water, fontWeight: '700' }}>Rename or delete “{current.name}”</Text></Pressable>}
+        {current && <Pressy onPress={manage} style={{ alignSelf: 'flex-start', marginTop: 8 }}><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13.5 }}>Rename or delete “{current.name}”</Text></Pressy>}
       </View>
       <FlatList
-        contentContainerStyle={{ padding: space.lg, paddingBottom: 120, flexGrow: 1 }}
+        contentContainerStyle={{ padding: 18, paddingBottom: 190, flexGrow: 1 }} showsVerticalScrollIndicator={false}
         data={data} keyExtractor={(p) => p.id}
-        renderItem={({ item }) => <PlaceRow place={item} photo={photos.data[item.id]} photoUri={photos.data[item.id] ? uris[photos.data[item.id].id] : undefined} imperial={imperial}
-          distance={me ? haversine(me, item) : null} onPress={() => router.push({ pathname: '/place/[id]', params: { id: item.id } })} />}
-        ListEmptyComponent={<Empty icon="bookmark-outline" title={search ? 'No matches' : 'Nothing here yet'} body={search ? 'Try a different search.' : 'Saved creeks appear here, sorted by what is closest to you.'} />}
+        renderItem={({ item }) => <PlaceRow place={item} photo={photos.data[item.id]} photoUri={photos.data[item.id] ? uris[photos.data[item.id].id] : undefined} imperial={imperial} distance={me ? haversine(me, item) : null} onPress={() => router.push(guideHref({ source: 'saved', id: item.id }))} />}
+        ListEmptyComponent={<Empty icon="bookmark-outline" title={search ? 'No matches' : 'Nothing here yet'} body={search ? 'Try a different search.' : 'Saved creeks appear here with your photos, sorted by what is closest to you.'} />}
       />
-      <View style={{ position: 'absolute', left: space.lg, right: space.lg, bottom: space.lg }}>
-        <SaveCreekButton compact onPress={async () => { if (await canSaveMore(premium, router.push)) router.push({ pathname: '/save', params: {} }); }} />
+      <View style={{ position: 'absolute', right: 18, bottom: 104 }}>
+        <Pressy onPress={add} accessibilityLabel="Save a location">
+          <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.water, paddingHorizontal: 20, height: 54, borderRadius: 27 }, shadow.float]}>
+            <Ionicons name="add" size={22} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800', fontSize: 14.5, letterSpacing: 0.3 }}>SAVE A LOCATION</Text>
+          </View>
+        </Pressy>
       </View>
       <TextPrompt visible={!!prompt} title={prompt?.mode === 'rename' ? 'Rename folder' : 'New folder'} initial={prompt?.mode === 'rename' ? prompt.name : ''} placeholder="e.g. Summer 2026"
         onCancel={() => setPrompt(null)} onSubmit={async (v) => { if (prompt?.mode === 'rename') await renameFolder(prompt.id, v); else await createFolder(v); setPrompt(null); }} />
     </SafeAreaView>
   );
 }
-
-const s = StyleSheet.create({
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: radius.pill, paddingHorizontal: 14, height: 46, marginTop: space.md, borderWidth: 1, borderColor: colors.line },
-});

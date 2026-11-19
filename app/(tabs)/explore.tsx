@@ -1,29 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { ActivityIndicator, FlatList, TextInput, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
-import { Banner, Chip, Empty, Button } from '../../src/components/ui';
+import { Banner, Button, Chip, Empty, Pressy, Skeleton, Text } from '../../src/components/ui';
+import { DestinationCard, type CardData } from '../../src/components/Bits';
 import { CreekMap, type MapPin } from '../../src/components/CreekMap';
-import { SourceBadge } from '../../src/components/Bits';
 import { useApp } from '../../src/state/app';
 import { ensureForegroundPermission, lastKnown } from '../../src/lib/location';
-import { geocode, searchCommunity, searchOsmWater, type GeoResult } from '../../src/lib/explore';
-import { boundsOfPoints, formatDistance } from '../../src/lib/geo';
-import { PLACE_KINDS, kindIcon, kindLabel, type ExploreItem, type PlaceKind } from '../../src/types';
-import { colors, font, radius, space } from '../../src/theme';
+import { enrichItems, geocode, searchCommunity, searchOsmWater, type GeoResult } from '../../src/lib/explore';
+import { itemHref } from '../../src/lib/nav';
+import { type ExploreItem, type PlaceKind } from '../../src/types';
+import { colors, font, radius, shadow, space } from '../../src/theme';
 
 type Filter = 'all' | PlaceKind;
-const FILTERS: { key: Filter; label: string; premium?: boolean }[] = [
-  { key: 'all', label: 'All' }, { key: 'waterfall', label: 'Waterfalls' }, { key: 'swimming_hole', label: 'Swimming holes' },
-  { key: 'river', label: 'Rivers' }, { key: 'stream', label: 'Streams / creeks' }, { key: 'pond_lake', label: 'Lakes & ponds' }, { key: 'spring', label: 'Springs' },
+const FILTERS: { key: Filter; label: string; icon: any }[] = [
+  { key: 'all', label: 'All', icon: 'apps' }, { key: 'waterfall', label: 'Waterfalls', icon: 'arrow-down-circle' }, { key: 'swimming_hole', label: 'Swimming holes', icon: 'body' },
+  { key: 'river', label: 'Rivers', icon: 'git-merge' }, { key: 'stream', label: 'Creeks & streams', icon: 'water' }, { key: 'pond_lake', label: 'Lakes & ponds', icon: 'ellipse' }, { key: 'spring', label: 'Springs', icon: 'sparkles' },
 ];
+const toCard = (i: ExploreItem): CardData => ({ key: i.key, name: i.name, kind: i.kind, photoUrl: i.photo?.url, credit: i.photo?.credit, location: i.town ? `Near ${i.town}` : null, distance_m: i.distance_m, rating: i.avg_rating, ratingCount: i.rating_count, desc: i.description, source: i.source });
 
 export default function Explore() {
   const router = useRouter();
-  const { online, imperial, premium, user } = useApp();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const { online, imperial, premium } = useApp();
   const cam = useRef<CameraRef>(null);
+  const input = useRef<any>(null);
   const [q, setQ] = useState('');
   const [center, setCenter] = useState<{ lat: number; lng: number; label: string } | null>(null);
   const [items, setItems] = useState<ExploreItem[]>([]);
@@ -33,8 +36,10 @@ export default function Explore() {
   const [results, setResults] = useState<GeoResult[]>([]);
   const [view, setView] = useState<'list' | 'map'>('list');
   const [onlyCommunity, setOnlyCommunity] = useState(false);
+  const seq = useRef(0);
 
   const load = useCallback(async (c: { lat: number; lng: number; label: string }) => {
+    const my = ++seq.current;
     setCenter(c); setLoading(true); setError(null); setItems([]);
     try {
       const [osm, com] = await Promise.allSettled([searchOsmWater(c), searchCommunity(c)]);
@@ -43,8 +48,12 @@ export default function Explore() {
       if (osm.status === 'fulfilled') all.push(...osm.value);
       if (osm.status === 'rejected' && com.status === 'rejected') setError('Could not load locations. Check your connection and try again.');
       all.sort((a, b) => (a.distance_m ?? 0) - (b.distance_m ?? 0));
-      setItems(all);
-    } finally { setLoading(false); }
+      if (my !== seq.current) return;
+      setItems(all); setLoading(false);
+      const top = all.slice(0, 40);
+      await enrichItems(top, c);          // real photos + nearest town; fills in after first paint
+      if (my === seq.current) setItems([...all]);
+    } finally { if (my === seq.current) setLoading(false); }
   }, []);
 
   const nearMe = useCallback(async () => {
@@ -54,108 +63,72 @@ export default function Explore() {
     if (!l) { setError('Waiting for a GPS fix. Move to open sky or search for a place instead.'); return; }
     await load({ lat: l.lat, lng: l.lng, label: 'Near you' });
   }, [load]);
-
   useEffect(() => { if (online) void nearMe(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (focus) setTimeout(() => input.current?.focus(), 350); }, [focus]);
 
   const search = async () => {
     if (!q.trim()) return;
     setError(null); setResults([]);
     try {
       const r = await geocode(q);
-      if (!r.length) setError(`No place found for “${q}”.`);
-      else if (r.length === 1) await pick(r[0]);
-      else setResults(r);
+      if (!r.length) setError(`No place found for “${q}”.`); else if (r.length === 1) await pick(r[0]); else setResults(r);
     } catch { setError('Search failed. Check your connection.'); }
   };
   const pick = async (r: GeoResult) => {
     setResults([]); setQ(r.name.split(',')[0]);
-    await load({ lat: r.lat, lng: r.lng, label: r.name });
     cam.current?.flyTo({ center: [r.lng, r.lat], zoom: 10, duration: 800 });
+    await load({ lat: r.lat, lng: r.lng, label: r.name });
   };
 
-  const shown = useMemo(() => items.filter((i) => (filter === 'all' || i.kind === filter) && (!onlyCommunity || i.source !== 'osm')), [items, filter, onlyCommunity]);
+  const shown = useMemo(() => items.filter((i) => (filter === 'all' || i.kind === filter || (filter === 'stream' && i.kind === 'creek')) && (!onlyCommunity || i.source !== 'osm')), [items, filter, onlyCommunity]);
   const pins: MapPin[] = useMemo(() => shown.map((i) => ({ id: i.key, lat: i.lat, lng: i.lng, name: i.name, group: i.source === 'osm' ? 'osm' : 'community', kind: i.kind })), [shown]);
 
-  const open = (i: ExploreItem) => {
-    if (i.placeId) router.push({ pathname: '/public/[id]', params: { id: i.placeId } });
-    else router.push({ pathname: '/explore-detail', params: { name: i.name, kind: i.kind, lat: String(i.lat), lng: String(i.lng), osm: i.osmId ?? '', desc: i.description ?? '' } });
-  };
-
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.sand }}>
-      <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
-        <Text style={font.h1}>Explore</Text>
-        <View style={s.search}>
-          <Ionicons name="search" size={18} color={colors.muted} />
-          <TextInput value={q} onChangeText={setQ} onSubmitEditing={search} placeholder="City, state, ZIP code or place" returnKeyType="search" style={{ flex: 1, fontSize: 16 }} autoCorrect={false} />
-          <Pressable onPress={nearMe} hitSlop={8} accessibilityLabel="Use my location"><Ionicons name="locate" size={22} color={colors.water} /></Pressable>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: 18, paddingTop: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={font.display}>Explore</Text>
+          <View style={{ flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 20, padding: 3 }}>
+            {(['list', 'map'] as const).map((v) => (
+              <Pressy key={v} onPress={() => setView(v)} accessibilityLabel={`${v} view`} style={{ paddingHorizontal: 14, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5, backgroundColor: view === v ? colors.primary : 'transparent' }}>
+                <Ionicons name={v === 'list' ? 'list' : 'map'} size={15} color={view === v ? '#fff' : colors.muted} /><Text style={{ fontWeight: '700', fontSize: 13, color: view === v ? '#fff' : colors.muted }}>{v === 'list' ? 'List' : 'Map'}</Text>
+              </Pressy>))}
+          </View>
+        </View>
+        <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, borderRadius: 28, paddingHorizontal: 18, height: 54, marginTop: 14 }, shadow.soft]}>
+          <Ionicons name="search" size={20} color={colors.muted} />
+          <TextInput ref={input} value={q} onChangeText={setQ} onSubmitEditing={search} placeholder="City, state, ZIP code or place" placeholderTextColor={colors.faint} returnKeyType="search" autoCorrect={false}
+            style={{ flex: 1, fontSize: 16, color: colors.ink, fontFamily: 'Inter_600SemiBold' }} />
+          <Pressy onPress={nearMe} accessibilityLabel="Use my location" hitSlop={8}><View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.waterTint, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="locate" size={19} color={colors.water} /></View></Pressy>
         </View>
         {results.length > 0 && (
-          <View style={s.dropdown}>
-            {results.map((r, i) => <Pressable key={i} onPress={() => pick(r)} style={{ padding: 12 }}><Text numberOfLines={2} style={font.body}>{r.name}</Text></Pressable>)}
+          <View style={[{ backgroundColor: colors.surface, borderRadius: radius.md, marginTop: 8, overflow: 'hidden' }, shadow.card]}>
+            {results.map((r, i) => <Pressy key={i} scale={0.99} onPress={() => pick(r)} style={{ padding: 14, borderTopWidth: i ? 1 : 0, borderColor: colors.line }}><Text numberOfLines={2} style={font.body}>{r.name}</Text></Pressy>)}
           </View>
         )}
-        <FlatList horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10, flexGrow: 0 }} data={FILTERS} keyExtractor={(f) => f.key}
-          renderItem={({ item }) => <Chip label={item.label} active={filter === item.key} onPress={() => setFilter(item.key)} />} />
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-          <View style={{ flexDirection: 'row' }}>
-            <Chip label="List" icon="list" active={view === 'list'} onPress={() => setView('list')} />
-            <Chip label="Map" icon="map" active={view === 'map'} onPress={() => setView('map')} />
-          </View>
-          <Chip label={premium ? 'Community only' : 'Community only ★'} icon="people" active={onlyCommunity} onPress={() => { if (!premium) { router.push({ pathname: '/premium', params: { reason: 'filters' } }); return; } setOnlyCommunity((v) => !v); }} />
-        </View>
+        <FlatList horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14, flexGrow: 0 }} data={FILTERS} keyExtractor={(f) => f.key} renderItem={({ item }) => <Chip label={item.label} icon={item.icon} active={filter === item.key} onPress={() => setFilter(item.key)} />}
+          ListFooterComponent={<Chip label={premium ? 'Community only' : 'Community only ★'} icon="people" active={onlyCommunity} onPress={() => { if (!premium) { router.push({ pathname: '/premium', params: { reason: 'filters' } }); return; } setOnlyCommunity((v) => !v); }} />} />
       </View>
 
-      {!online && <View style={{ paddingHorizontal: space.lg }}><Banner tone="info" icon="cloud-offline">You're offline. Exploring needs internet — your saved places are still available in My Places and Map.</Banner></View>}
-      {error && <View style={{ paddingHorizontal: space.lg }}><Banner tone="warn" icon="alert-circle">{error}</Banner></View>}
-      {loading && <ActivityIndicator style={{ margin: space.lg }} color={colors.forest} />}
+      {!online && <View style={{ paddingHorizontal: 18 }}><Banner tone="info" icon="cloud-offline">You're offline. Exploring needs internet — your saved places are still in My Places and Map.</Banner></View>}
+      {error && <View style={{ paddingHorizontal: 18 }}><Banner tone="warn" icon="alert-circle">{error}</Banner></View>}
 
       {view === 'map' ? (
-        <View style={{ flex: 1, marginTop: 8 }}>
-          <CreekMap styleKey="standard" cameraRef={cam} pins={pins} showUser attributionBottom={8} initial={center ? { center: [center.lng, center.lat], zoom: 9 } : undefined}
-            onPressPin={(p) => { const it = items.find((x) => x.key === p.id); if (it) open(it); }} />
-          <Legend />
+        <View style={{ flex: 1, marginTop: 10, marginHorizontal: 12, marginBottom: 96, borderRadius: radius.lg, overflow: 'hidden' }}>
+          <CreekMap styleKey="standard" cameraRef={cam} pins={pins} showUser attributionBottom={8} initial={center ? { center: [center.lng, center.lat], zoom: 9.5 } : undefined}
+            onPressPin={(p) => { const it = items.find((x) => x.key === p.id); if (it) router.push(itemHref(it)); }} />
+          {loading && <ActivityIndicator style={{ position: 'absolute', top: 14, alignSelf: 'center' }} color={colors.primary} />}
         </View>
       ) : (
         <FlatList
-          contentContainerStyle={{ padding: space.lg, paddingBottom: 40, flexGrow: 1 }} data={shown} keyExtractor={(i) => i.key}
-          ListHeaderComponent={shown.length ? (<Text style={[font.small, { marginBottom: 8 }]}>{shown.length} locations · {center?.label?.split(',')[0]}. <Text style={{ fontWeight: '700' }}>Blue/green = community, grey = OpenStreetMap.</Text> Always confirm access and safety yourself.</Text>) : undefined}
-          renderItem={({ item }) => <ExploreRow item={item} imperial={imperial} onPress={() => open(item)} />}
-          ListEmptyComponent={!loading ? <Empty icon="compass-outline" title="Nothing found yet" body="Try another search or a larger area. Results come from OpenStreetMap and from creeks shared by the CreekFinder community." action={<Button small title="Search near me" onPress={nearMe} />} /> : undefined}
+          contentContainerStyle={{ padding: 18, paddingBottom: 130, flexGrow: 1 }} data={shown} keyExtractor={(i) => i.key} showsVerticalScrollIndicator={false}
+          ListHeaderComponent={shown.length ? <Text style={[font.small, { marginBottom: 12 }]}>{shown.length} places · {center?.label?.split(',')[0]} · sorted by distance</Text> : undefined}
+          renderItem={({ item, index }) => <DestinationCard variant="full" index={index} imperial={imperial} d={toCard(item)} onPress={() => router.push(itemHref(item))} />}
+          ListEmptyComponent={loading ? <View style={{ gap: 16 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={214} r={26} />)}</View> : (
+            <Empty icon="compass-outline" title="Nothing found yet" body="Try another search or a larger area. Results come from OpenStreetMap and creeks shared by the CreekFinder community." action={<Button small title="Search near me" onPress={nearMe} />} />)}
+          ListFooterComponent={shown.length ? <Text style={[font.small, { marginTop: 4 }]}>Photos: Wikimedia Commons & explorers. Data © OpenStreetMap contributors. Always confirm access and safety yourself.</Text> : undefined}
         />
       )}
     </SafeAreaView>
   );
 }
-
-function Legend() {
-  return (
-    <View style={s.legend}>
-      {[['Community', colors.water], ['OpenStreetMap', '#7A8F86']].map(([l, c]) => (
-        <View key={l} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: c }} /><Text style={{ fontSize: 12, fontWeight: '600' }}>{l}</Text></View>
-      ))}
-    </View>
-  );
-}
-
-function ExploreRow({ item, imperial, onPress }: { item: ExploreItem; imperial: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={s.row} accessibilityRole="button" accessibilityLabel={item.name}>
-      <View style={[s.icon, { backgroundColor: item.source === 'osm' ? '#ECEFEC' : colors.waterLight }]}><Ionicons name={kindIcon(item.kind) as any} size={22} color={item.source === 'osm' ? colors.muted : colors.water} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={font.h3} numberOfLines={1}>{item.name}</Text>
-        <Text style={font.small}>{kindLabel(item.kind)}{item.distance_m != null ? `  ·  ${formatDistance(item.distance_m, imperial)}` : ''}{item.avg_rating ? `  ·  ★ ${item.avg_rating.toFixed(1)} (${item.rating_count})` : ''}</Text>
-        <SourceBadge source={item.source} />
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-    </Pressable>
-  );
-}
-
-const s = StyleSheet.create({
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: radius.pill, paddingHorizontal: 14, height: 48, marginTop: space.md, borderWidth: 1, borderColor: colors.line },
-  dropdown: { backgroundColor: '#fff', borderRadius: radius.md, marginTop: 6, borderWidth: 1, borderColor: colors.line },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderRadius: radius.md, marginBottom: 10 },
-  icon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  legend: { position: 'absolute', left: 12, top: 12, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, padding: 8, gap: 4 },
-});

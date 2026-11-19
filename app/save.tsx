@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -77,7 +78,7 @@ export default function SaveScreen() {
       });
       for (const r of removed) await deletePhoto(r);
       for (const uri of newPhotos) await addPhoto({ place_id: id, local_uri: uri });
-      if (editing) router.back(); else router.replace({ pathname: '/place/[id]', params: { id } });
+      if (editing) router.back(); else router.replace({ pathname: '/creek', params: { source: 'saved', id } });
     } catch (e: any) {
       Alert.alert('Could not save', e?.message ?? 'Please try again.');
     } finally { setSaving(false); }

@@ -8,6 +8,7 @@ A personal creek-finding GPS and outdoor exploration app for **iOS and Android**
 |---|---|
 | [docs/INSTALL_ON_PHONE.md](docs/INSTALL_ON_PHONE.md) | **Install on a phone with no app store** (web app / Home Screen) |
 | [docs/SETUP.md](docs/SETUP.md) | Every account/API key you need and exactly how to get it |
+| [docs/DESIGN_2_0.md](docs/DESIGN_2_0.md) | **2.0 redesign:** design system, Destination Guide and the real data source for every fact |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Stack choices, offline sync design, database, screens |
 | [docs/TESTING.md](docs/TESTING.md) | Automated checks + the manual device test plan |
 | [docs/STORE_RELEASE.md](docs/STORE_RELEASE.md) | Builds, App Store / Google Play checklists, privacy labels, review notes |

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
+import { Text } from './ui';
 import { Ionicons } from '@expo/vector-icons';
 import { Banner, Card, SAFETY_NOTICE } from './ui';
 import { getNearbyGauges, getWeather, type Gauge, type Weather } from '../lib/safety';

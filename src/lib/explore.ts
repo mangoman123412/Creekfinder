@@ -1,6 +1,7 @@
 import { config, hasMapTiler } from '../config';
 import { fetchJson } from './net';
 import { haversine, boundsAround } from './geo';
+import { commonsPhotos, nearestTown, townsNear, waterPhotosNear, type GuidePhoto } from './guide';
 import type { ExploreItem, PlaceKind } from '../types';
 import { supabase } from './supabase';
 
@@ -51,7 +52,7 @@ export async function searchOsmWater(center: { lat: number; lng: number }, radiu
         const dedupeKey = `${name}|${kind}`;
         const item: ExploreItem = {
           key: `osm-${el.type}-${el.id}`, source: 'osm', name, kind, lat, lng, osmId: `${el.type}/${el.id}`,
-          description: tags.description ?? tags['name:en'] ?? null, distance_m: haversine(center, { lat, lng }),
+          description: tags.description ?? tags['name:en'] ?? null, distance_m: haversine(center, { lat, lng }), tags, photo: tagPhoto(tags),
         };
         const prev = seen.get(dedupeKey);
         if (!prev || item.distance_m! < prev.distance_m!) seen.set(dedupeKey, item);
@@ -69,7 +70,7 @@ export async function searchCommunity(center: { lat: number; lng: number }, radi
   if (error) throw error;
   return (data ?? []).map((p: any): ExploreItem => ({
     key: `cf-${p.id}`, source: p.verified ? 'verified' : 'community', name: p.name, kind: p.kind, lat: p.lat, lng: p.lng, description: p.description,
-    distance_m: haversine(center, p), placeId: p.id, author: p.author, avg_rating: p.avg_rating ? Number(p.avg_rating) : null, rating_count: Number(p.rating_count ?? 0),
+    distance_m: haversine(center, p), placeId: p.id, author: p.author, avg_rating: p.avg_rating ? Number(p.avg_rating) : null, rating_count: Number(p.rating_count ?? 0), created_at: p.created_at,
   })).sort((a: ExploreItem, b: ExploreItem) => a.distance_m! - b.distance_m!);
 }
 
@@ -97,4 +98,31 @@ export async function geocode(query: string): Promise<GeoResult[]> {
   const d = await fetchJson<{ display_name: string; lat: string; lon: string }[]>(
     `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`, { headers: { 'User-Agent': config.userAgent } });
   return d.map((r) => ({ name: r.display_name, lat: Number(r.lat), lng: Number(r.lon) }));
+}
+
+function tagPhoto(t: Record<string, string>): ExploreItem['photo'] {
+  if (t.image && /^https?:\/\//.test(t.image)) return { url: t.image, credit: 'OpenStreetMap contributor', pageUrl: t.image, license: '' };
+  const f = t.wikimedia_commons;
+  if (f && /^File:/i.test(f)) {
+    const name = f.replace(/^File:/i, '');
+    return { url: `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(name)}?width=900`, credit: 'Wikimedia Commons', pageUrl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(f)}`, license: 'Open license' };
+  }
+  return null;
+}
+
+/** Give each item a real, nearby water photo (never reused on two cards) and its nearest town. */
+export function assignPhotos(items: ExploreItem[], photos: GuidePhoto[]): void {
+  const used = new Set<string>();
+  for (const it of items) {
+    if (it.photo) continue;
+    const pick = waterPhotosNear(photos, it, it.name, 2.5).find((p) => !used.has(p.id));
+    if (pick) { used.add(pick.id); it.photo = { url: pick.url, credit: pick.credit, pageUrl: pick.pageUrl, license: pick.license }; }
+  }
+}
+
+export async function enrichItems(items: ExploreItem[], center: { lat: number; lng: number }, radiusM = 25000): Promise<ExploreItem[]> {
+  const [ph, tw] = await Promise.allSettled([commonsPhotos(center.lat, center.lng, 10000, 100), townsNear(center.lat, center.lng, radiusM)]);
+  if (ph.status === 'fulfilled') assignPhotos(items, ph.value);
+  if (tw.status === 'fulfilled') for (const it of items) { const t = nearestTown(tw.value, it); if (t && t.distance_m < 30000) { it.town = t.name; it.townDist = t.distance_m; } }
+  return items;
 }

@@ -3,6 +3,7 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Camera, GeoJSONSource, Layer, Map, UserLocation, type CameraRef, type MapRef } from '@maplibre/maplibre-react-native';
 import type { MapStyleKey } from '../types';
 import { styleUrl } from '../lib/mapStyles';
+import { isDark } from '../theme';
 import { colors } from '../theme';
 
 export type PinGroup = 'saved' | 'community' | 'osm' | 'target';
@@ -53,7 +54,7 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<CameraRef>; 
     return (
       <Map
         style={[StyleSheet.absoluteFill, p.style]}
-        mapStyle={styleUrl(p.styleKey)}
+        mapStyle={styleUrl(p.styleKey, isDark())}
         logo={false}
         attributionPosition={{ bottom: p.attributionBottom ?? 8, left: 8 }}
         compass

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, FlatList, Platform, ScrollView, Text, View } from 'react-native';
+import { Dimensions, FlatList, Platform, ScrollView, View } from 'react-native';
+import { Text } from '../../src/components/ui';
 import { Alert } from '../../src/lib/alert';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Image } from 'expo-image';

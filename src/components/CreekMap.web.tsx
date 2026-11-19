@@ -2,6 +2,7 @@ import React, { useEffect, useImperativeHandle, useRef } from 'react';
 import { View } from 'react-native';
 import type { CreekMapProps, MapPin } from './CreekMap';
 import { styleUrl } from '../lib/mapStyles';
+import { isDark } from '../theme';
 import { colors } from '../theme';
 
 export type { MapPin, PinGroup, CreekMapProps } from './CreekMap';
@@ -51,7 +52,7 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
     if (!ml || !host.current) return;
     const init = props.current.initial;
     const m = new ml.Map({
-      container: host.current, style: styleUrl(props.current.styleKey), center: init?.center ?? [-98.5, 39.8], zoom: init?.zoom ?? 3,
+      container: host.current, style: styleUrl(props.current.styleKey, isDark()), center: init?.center ?? [-98.5, 39.8], zoom: init?.zoom ?? 3,
       maxZoom: props.current.maxZoom ?? 20, attributionControl: { compact: true }, pitchWithRotate: false, dragRotate: false,
     });
     map.current = m; (window as any).__cfmap = m;
@@ -64,6 +65,7 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
       m.addLayer({ id: 'track-line', type: 'line', source: 'track', paint: { 'line-color': '#E4572E', 'line-width': 4 }, layout: { 'line-cap': 'round', 'line-join': 'round' } });
       m.addSource('pins', { type: 'geojson', data: empty, cluster: true, clusterRadius: 42, clusterMaxZoom: 13 });
       m.addLayer({ id: 'pins-cluster', type: 'circle', source: 'pins', filter: ['has', 'point_count'], paint: { 'circle-color': colors.forestDark, 'circle-radius': 17, 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' } });
+      m.addLayer({ id: 'pins-count', type: 'symbol', source: 'pins', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Bold'], 'text-size': 13 }, paint: { 'text-color': '#ffffff' } });
       m.addLayer({ id: 'pins-sel', type: 'circle', source: 'pins', filter: ['==', ['get', 'id'], ''], paint: { 'circle-color': '#FFD54A', 'circle-radius': 17, 'circle-opacity': 0.9 } });
       m.addLayer({ id: 'pins-dot', type: 'circle', source: 'pins', filter: ['!', ['has', 'point_count']], paint: { 'circle-color': ['get', 'color'], 'circle-radius': 9, 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' } });
       ready.current = true; sync();
@@ -107,7 +109,7 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
     return () => { ro.disconnect(); if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current); m.remove(); map.current = null; ready.current = false; userDot.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { const m = map.current; if (!m) return; m.setStyle(styleUrl(p.styleKey)); ready.current = false;
+  useEffect(() => { const m = map.current; if (!m) return; m.setStyle(styleUrl(p.styleKey, isDark())); ready.current = false;
     m.once('style.load', () => { /* re-add layers */ m.fire('load'); }); }, [p.styleKey]); // eslint-disable-line
   useEffect(sync, [p.pins, p.track, p.multiTrack, p.guide, p.selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 

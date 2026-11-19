@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ type Target = { name: string; lat: number; lng: number };
  *  - /navigate?adventure=<id>      : retrace a recorded track back to its start
  */
 export default function Navigate() {
+  const s = getS();
   const q = useLocalSearchParams<{ id?: string; lat?: string; lng?: string; name?: string; adventure?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -113,7 +115,7 @@ export default function Navigate() {
   );
 }
 
-const s = StyleSheet.create({
-  panel: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white, padding: space.lg, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadow },
+const getS = () => StyleSheet.create({
+  panel: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, padding: space.lg, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadow.float },
   arrowWrap: { width: 76, height: 76, borderRadius: radius.pill, backgroundColor: colors.waterLight, alignItems: 'center', justifyContent: 'center' },
 });

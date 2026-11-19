@@ -92,3 +92,15 @@ export async function deleteAccountRemote(userId: string) {
   if (error) throw error;
   await sb.auth.signOut();
 }
+
+/** Upload a photo to a PUBLIC place owned by someone else (needs internet). */
+export async function uploadCommunityPhoto(placeId: string, userId: string, localUri: string) {
+  const sb = need();
+  const { readBytes } = await import('./photos');
+  const id = (globalThis.crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const path = `${userId}/${id}.jpg`;
+  const up = await sb.storage.from('photos').upload(path, await readBytes(localUri), { contentType: 'image/jpeg', upsert: true });
+  if (up.error) throw up.error;
+  const { error } = await sb.from('photos').insert({ id, user_id: userId, place_id: placeId, storage_path: path });
+  if (error) { await sb.storage.from('photos').remove([path]); throw error; }
+}
