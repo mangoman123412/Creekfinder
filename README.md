@@ -27,6 +27,6 @@ npx expo start --dev-client      # needs a dev build (maps are native code)
 ⬜ Not yet exercised on a device: live GPS, background tracking, map rendering, offline packs, camera/photos, Supabase round-trips (RLS, sync, storage), purchases. These need your keys and a phone — follow docs/TESTING.md.
 
 ## Known gaps / honest notes
-* **Not implemented:** property-boundary warnings (no reliable free national dataset; the app says so rather than guessing — Regrid or similar is a paid integration); "more photo storage" for Premium isn't metered yet; sync conflict resolution is last-write-wins; water-level/flood data is US-only (USGS/NWS); no Android tablet/iPad-specific layouts.
+* **Not implemented:** property-boundary warnings (no reliable free national dataset; the app says so rather than guessing — Regrid or similar is a paid integration); sync conflict resolution is last-write-wins; water-level/flood data is US-only (USGS/NWS); no Android tablet/iPad-specific layouts.
 * Map tile terms (MapTiler) must be checked for commercial + offline use — docs/SETUP.md §3.
 * Moderation is manual via the Supabase dashboard (`reports` table).

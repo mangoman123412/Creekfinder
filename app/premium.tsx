@@ -13,6 +13,7 @@ const WHY: Record<string, string> = {
   limit: `You've saved ${FREE_PLACE_LIMIT} places — the free limit. Go Premium for unlimited saved creeks.`,
   maps: 'Satellite and topographic maps are part of Premium.',
   offline: 'Offline map downloads are part of Premium.',
+  photos: 'Premium lets each place hold up to 30 photos (free: 5).',
   filters: 'Advanced search filters are part of Premium.',
   history: `Free accounts keep ${FREE_ADVENTURE_LIMIT} adventures. Premium keeps unlimited GPS history.`,
 };
@@ -23,7 +24,7 @@ const FEATURES: [string, string, string][] = [
   ['cloud-download', 'Offline map downloads', 'Free: not included'],
   ['footsteps', 'Unlimited GPS adventure history', `Free: last ${FREE_ADVENTURE_LIMIT}`],
   ['options', 'Advanced search filters', 'Free: basic filters'],
-  ['images', 'More photo storage', 'Free: standard'],
+  ['images', 'More photo storage', 'Free: 5 photos per place · Premium: 30'],
 ];
 
 export default function Premium() {

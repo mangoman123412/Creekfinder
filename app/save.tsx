@@ -13,7 +13,7 @@ import { usePhotoUris } from '../src/state/hooks';
 import { colors, font, space } from '../src/theme';
 import { formatCoords } from '../src/lib/geo';
 import { FREE_PLACE_LIMIT } from '../src/config';
-import { hasBackend } from '../src/config';
+import { hasBackend, FREE_PHOTOS_PER_PLACE, PREMIUM_PHOTOS_PER_PLACE } from '../src/config';
 
 export default function SaveScreen() {
   const router = useRouter();
@@ -82,8 +82,24 @@ export default function SaveScreen() {
     } finally { setSaving(false); }
   };
 
-  const addFromCamera = async () => { try { const u = await takePhoto(); if (u) setNewPhotos((p) => [...p, u]); } catch (e: any) { Alert.alert('Camera', e.message, [{ text: 'OK' }, { text: 'Settings', onPress: openSettings }]); } };
-  const addFromLibrary = async () => { const u = await pickPhotos(); if (u.length) setNewPhotos((p) => [...p, ...u]); };
+  const photoCap = premium ? PREMIUM_PHOTOS_PER_PLACE : FREE_PHOTOS_PER_PLACE;
+  const room = () => {
+    const n = existing.filter((p) => !removed.includes(p.id)).length + newPhotos.length;
+    if (n >= photoCap) {
+      Alert.alert('Photo limit reached', premium ? `Up to ${photoCap} photos per place.` : `Free places hold ${photoCap} photos. Premium allows ${PREMIUM_PHOTOS_PER_PLACE}.`,
+        premium ? [{ text: 'OK' }] : [{ text: 'Not now', style: 'cancel' }, { text: 'See Premium', onPress: () => router.push({ pathname: '/premium', params: { reason: 'photos' } }) }]);
+      return false;
+    }
+    return true;
+  };
+  const addFromCamera = async () => {
+    if (!room()) return; try { const u = await takePhoto(); if (u) setNewPhotos((p) => [...p, u]); } catch (e: any) { Alert.alert('Camera', e.message, [{ text: 'OK' }, { text: 'Settings', onPress: openSettings }]); } };
+  const addFromLibrary = async () => {
+    if (!room()) return;
+    const left = photoCap - (existing.filter((p) => !removed.includes(p.id)).length + newPhotos.length);
+    const u = (await pickPhotos()).slice(0, left);
+    if (u.length) setNewPhotos((p) => [...p, ...u]);
+  };
 
   const shown = existing.filter((p) => !removed.includes(p.id));
   const uris = usePhotoUris(existing);

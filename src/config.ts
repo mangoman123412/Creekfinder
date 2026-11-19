@@ -17,3 +17,5 @@ export const hasMapTiler = !!config.maptilerKey;
 
 export const FREE_PLACE_LIMIT = 25;
 export const FREE_ADVENTURE_LIMIT = 10;
+export const FREE_PHOTOS_PER_PLACE = 5;
+export const PREMIUM_PHOTOS_PER_PLACE = 30;
