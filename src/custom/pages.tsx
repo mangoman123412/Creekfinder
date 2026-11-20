@@ -11,12 +11,12 @@ import type { Settings } from './schema';
 import { sanitizeLibrary } from './schema';
 import { SettingsPage } from './controls';
 
-export function LivePreview({ s, device = 'phone', width = 190 }: { s?: Settings; device?: DeviceId; width?: number }) {
+export function LivePreview({ s, device = 'phone', width = 190, caption = true }: { s?: Settings; device?: DeviceId; width?: number; caption?: boolean }) {
   const live = useSettings(); const sys = useColorScheme() === 'dark';
   return (
     <View style={{ alignItems: 'center', marginBottom: 6 }}>
       <MiniPhone s={s ?? live} systemDark={sys} device={device} width={width} />
-      <Text style={[font.small, { marginTop: 6 }]}>Live preview — updates as you change settings</Text>
+      {caption && <Text style={[font.small, { marginTop: 6 }]}>Live preview — updates as you change settings</Text>}
     </View>
   );
 }

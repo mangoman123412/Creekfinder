@@ -24,9 +24,9 @@ function Hub() {
   const notif = Object.values(s.notifications.enabled).filter(Boolean).length;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 18, paddingBottom: 120 }}>
-      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-        <LivePreview width={104} />
-        <View style={{ flex: 1, gap: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+        <View style={{ width: 118 }}><LivePreview width={104} caption={false} /></View>
+        <View style={{ flex: 1, gap: 8, minWidth: 0 }}>
           <Text style={font.h1}>Make it yours</Text>
           <Text style={font.small}>Active profile</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Ionicons name={prof.icon as any} size={20} color={colors.primary} /><Text style={{ fontWeight: '800', fontSize: 16 }} numberOfLines={1}>{prof.name}</Text></View>
