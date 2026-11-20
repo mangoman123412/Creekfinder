@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { ScrollView, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
@@ -20,7 +21,7 @@ const TIPS = [
   'In an emergency call 911 (or your local emergency number). Give the coordinates below.',
 ];
 
-export default function Safety() {
+function Safety() {
   const [pos, setPos] = useState<{ lat: number; lng: number; acc: number | null } | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { void (async () => { if (await ensureForegroundPermission()) { const l = await lastKnown(); if (l) setPos({ lat: l.lat, lng: l.lng, acc: l.accuracy }); } })(); }, []);
@@ -52,3 +53,4 @@ export default function Safety() {
     </ScrollView>
   );
 }
+export default themed(Safety);

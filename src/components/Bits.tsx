@@ -1,7 +1,7 @@
 import React from 'react';
 import { Linking, Platform, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../custom/Icon';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -9,6 +9,7 @@ import { colors, font, radius, shadow, space } from '../theme';
 import { kindIcon, kindLabel, type ExploreItem, type Place, type Photo } from '../types';
 import { formatDistance } from '../lib/geo';
 import { Pill, Pressy, Skeleton, Text } from './ui';
+import { fx } from '../custom/motion';
 
 /** Big, obvious primary action. */
 export function SaveCreekButton({ onPress, compact }: { onPress: () => void; compact?: boolean; floating?: boolean }) {
@@ -34,11 +35,11 @@ export interface CardData {
 }
 
 /** Image-led destination card. Real photo when one exists, otherwise a designed gradient — never a fake photo. */
-export function DestinationCard({ d, onPress, imperial, variant = 'wide', index = 0 }: { d: CardData; onPress: () => void; imperial: boolean; variant?: 'wide' | 'tall' | 'full'; index?: number }) {
-  const w = variant === 'wide' ? 268 : variant === 'tall' ? 188 : undefined;
-  const h = variant === 'wide' ? 188 : variant === 'tall' ? 244 : 214;
+export function DestinationCard({ d, onPress, imperial, variant = 'wide', index = 0 }: { d: CardData; onPress: () => void; imperial: boolean; variant?: 'mini' | 'wide' | 'tall' | 'full'; index?: number }) {
+  const w = variant === 'wide' ? 268 : variant === 'tall' ? 188 : variant === 'mini' ? 158 : undefined;
+  const h = variant === 'wide' ? 188 : variant === 'tall' ? 244 : variant === 'mini' ? 132 : 214;
   const g = GRAD[d.kind] ?? GRAD.other;
-  const entering = variant === 'full' ? FadeInDown.delay(Math.min(index, 8) * 55).duration(380) : FadeInRight.delay(Math.min(index, 6) * 70).duration(380);
+  const entering = variant === 'full' ? fx(FadeInDown, 380, Math.min(index, 8) * 55) : fx(FadeInRight, 380, Math.min(index, 6) * 70);
   return (
     <Animated.View entering={entering} style={[{ width: w as any, marginRight: variant === 'full' ? 0 : 14, marginBottom: variant === 'full' ? 16 : 0 }]}>
       <Pressy onPress={onPress} accessibilityLabel={d.name} scale={0.97} style={[{ height: h, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: g[1] }, shadow.card]}>
@@ -49,11 +50,11 @@ export function DestinationCard({ d, onPress, imperial, variant = 'wide', index 
         )}
         <LinearGradient colors={['rgba(0,0,0,0.30)', 'transparent', 'rgba(0,0,0,0.78)']} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFill} />
         <View style={{ position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Pill tone="dark" icon={kindIcon(d.kind) as any} label={kindLabel(d.kind)} />
+          {variant === 'mini' ? <View /> : <Pill tone="dark" icon={kindIcon(d.kind) as any} label={kindLabel(d.kind)} />}
           {d.saved ? <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="bookmark" size={16} color={colors.primary} /></View> : null}
         </View>
         <View style={{ position: 'absolute', left: 14, right: 14, bottom: 12 }}>
-          <Text numberOfLines={1} style={{ color: '#fff', fontSize: 19, fontWeight: '800', letterSpacing: -0.3 }}>{d.name}</Text>
+          <Text numberOfLines={1} style={{ color: '#fff', fontSize: variant === 'mini' ? 15 : 19, fontWeight: '800', letterSpacing: -0.3 }}>{d.name}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
             <Ionicons name="location-sharp" size={13} color="rgba(255,255,255,0.85)" />
             <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.92)', fontSize: 13, flexShrink: 1 }}>
@@ -61,7 +62,7 @@ export function DestinationCard({ d, onPress, imperial, variant = 'wide', index 
             </Text>
             {d.rating ? (<><Ionicons name="star" size={12} color="#F5B942" /><Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{d.rating.toFixed(1)}</Text></>) : null}
           </View>
-          {variant !== 'tall' && d.desc ? <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12.5, marginTop: 4 }}>{d.desc}</Text> : null}
+          {variant !== 'tall' && variant !== 'mini' && d.desc ? <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12.5, marginTop: 4 }}>{d.desc}</Text> : null}
         </View>
         {d.credit && d.photoUrl ? <Text style={{ position: 'absolute', right: 10, top: 48, color: 'rgba(255,255,255,0.55)', fontSize: 9 }} numberOfLines={1}>📷 {d.credit.slice(0, 26)}</Text> : null}
       </Pressy>

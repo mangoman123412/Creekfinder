@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { KeyboardAvoidingView, Linking, Platform, ScrollView, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
@@ -8,7 +9,7 @@ import { supabase } from '../src/lib/supabase';
 import { config, hasBackend } from '../src/config';
 import { colors, font, space } from '../src/theme';
 
-export default function Auth() {
+function Auth() {
   const router = useRouter();
   const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState('');
@@ -62,3 +63,4 @@ export default function Auth() {
     </KeyboardAvoidingView>
   );
 }
+export default themed(Auth);

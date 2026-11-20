@@ -32,6 +32,9 @@ export interface Place {
   folder_id: string | null;
   visibility: Visibility;
   source_place_id: string | null;
+  favorite: number;
+  tags: string | null;
+  rating: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +46,9 @@ export interface Folder {
   icon: string;
   sort: number;
   system_key: string | null;
+  color: string | null;
+  parent_id: string | null;
+  private: number;
 }
 
 export interface Photo {

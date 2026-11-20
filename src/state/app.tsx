@@ -8,6 +8,8 @@ import { subscribeDb, wipeLocal, kvGet, kvSet } from '../db/local';
 import { syncNow, pendingCount } from '../db/sync';
 import { billingLogin, currentPremium, onPremiumChange, billingConfigured } from '../lib/entitlements';
 import { FREE_PLACE_LIMIT } from '../config';
+import { startAlertLoop } from '../custom/alerts';
+import { enableAutoPush, syncCustomization } from '../custom/sync';
 
 interface Ctx {
   user: User | null;
@@ -96,6 +98,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     void pendingCount().then(setPending);
     return () => { off(); if (t) clearTimeout(t); };
   }, [sync]);
+
+  useEffect(() => startAlertLoop(() => uid), [uid]);
+  useEffect(() => { enableAutoPush(() => uid); }, [uid]);
+  useEffect(() => { if (uid && online) void syncCustomization(uid).catch(() => {}); }, [uid, online]);
 
   const signOut = useCallback(async () => {
     // Don't leave the previous person's private places on the device.

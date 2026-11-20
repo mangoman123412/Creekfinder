@@ -1,10 +1,11 @@
 import React from 'react';
+import { themed } from '../src/custom/themed';
 import { ScrollView } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Banner } from '../src/components/ui';
 import { colors, font, space } from '../src/theme';
 
-export default function OfflineWeb() {
+function OfflineWeb() {
   return (
     <ScrollView style={{ backgroundColor: colors.sand }} contentContainerStyle={{ padding: space.lg }}>
       <Text style={font.h2}>Offline use in the web app</Text>
@@ -16,3 +17,4 @@ export default function OfflineWeb() {
     </ScrollView>
   );
 }
+export default themed(OfflineWeb);

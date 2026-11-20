@@ -59,6 +59,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-dev-client',
+    ['expo-notifications', { color: '#1F5A43' }],
     'expo-sqlite',
     'expo-secure-store',
     ['expo-splash-screen', { image: './assets/splash-icon.png', backgroundColor: '#1F4D3A', imageWidth: 220 }],

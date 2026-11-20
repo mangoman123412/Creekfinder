@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { themed } from '../../src/custom/themed';
 import { ScrollView, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../src/custom/Icon';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Linking } from 'react-native';
@@ -21,7 +22,7 @@ import { formatDistance } from '../../src/lib/geo';
 import { config, hasBackend, FREE_PLACE_LIMIT } from '../../src/config';
 import { colors, font, radius, shadow } from '../../src/theme';
 
-export default function Profile() {
+function Profile() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, premium, online, syncing, pending, sync, signOut, imperial, setImperial, displayName, lastSyncError } = useApp();
@@ -75,11 +76,22 @@ export default function Profile() {
             </View>
           </>)}
 
-          <SectionTitle>Appearance</SectionTitle>
-          <View style={{ flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 22, padding: 4 }}>
+          <SectionTitle>Make it yours</SectionTitle>
+          <Pressy onPress={() => router.push('/settings')} accessibilityLabel="Customize CreekFinder" scale={0.98}>
+            <LinearGradient colors={[colors.water, colors.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[{ borderRadius: radius.lg, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 14 }, shadow.card]}>
+              <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="color-wand" size={26} color="#fff" /></View>
+              <View style={{ flex: 1 }}><Text style={{ color: '#fff', fontWeight: '800', fontSize: 17 }}>Customize CreekFinder</Text><Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>Themes, home screen, map, creek pages, tracking, notifications & more</Text></View>
+              <Ionicons name="chevron-forward" size={20} color="#fff" />
+            </LinearGradient>
+          </Pressy>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <Button small variant="secondary" icon="color-wand" title="Design editor" style={{ flex: 1 }} onPress={() => router.push('/editor')} />
+            <Button small variant="secondary" icon="storefront" title="Marketplace" style={{ flex: 1 }} onPress={() => router.push('/marketplace')} />
+          </View>
+          <View style={{ flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 22, padding: 4, marginTop: 12 }}>
             {([['system', 'Auto', 'phone-portrait'], ['light', 'Light', 'sunny'], ['dark', 'Dark', 'moon']] as [ThemePref, string, any][]).map(([k, l, ic]) => (
-              <Pressy key={k} onPress={() => setPref(k)} accessibilityLabel={`${l} theme`} style={{ flex: 1, height: 42, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: pref === k ? colors.primary : 'transparent' }}>
-                <Ionicons name={ic} size={16} color={pref === k ? '#fff' : colors.muted} /><Text style={{ fontWeight: '700', fontSize: 13.5, color: pref === k ? '#fff' : colors.muted }}>{l}</Text>
+              <Pressy key={k} onPress={() => setPref(k)} accessibilityLabel={`${l} mode`} style={{ flex: 1, height: 42, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: pref === k ? colors.primary : 'transparent' }}>
+                <Ionicons name={ic} size={16} color={pref === k ? colors.onPrimary : colors.muted} /><Text style={{ fontWeight: '700', fontSize: 13.5, color: pref === k ? colors.onPrimary : colors.muted }}>{l}</Text>
               </Pressy>))}
           </View>
 
@@ -120,3 +132,4 @@ export default function Profile() {
     </View>
   );
 }
+export default themed(Profile);

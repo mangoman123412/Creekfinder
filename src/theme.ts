@@ -1,74 +1,75 @@
 /**
- * CreekFinder design system. Light + dark palettes behind one `colors` object.
- * `colors` reads the ACTIVE palette every time, so screens stay correct after a theme change
- * (the root remounts with a new key when the scheme flips — see state/theme.tsx).
+ * CreekFinder design tokens. EVERYTHING here is driven by the user's customization (src/custom):
+ *   colors  -> built from the chosen theme + overrides (+ high-contrast)
+ *   radius / space / shadow / font -> scaled by corners, density and card-style settings
+ * `colors`, `radius`, `space` and `shadow` read the *current* values each time, so a re-render picks up changes instantly.
  */
 export interface Palette {
   bg: string; surface: string; surface2: string; surface3: string;
   ink: string; muted: string; faint: string; line: string;
   primary: string; primaryDeep: string; onPrimary: string;
+  button: string; onButton: string; navBg: string;
   water: string; waterDeep: string; waterTint: string;
   amber: string; amberTint: string;
   danger: string; dangerTint: string; ok: string; okTint: string;
   overlay: string; scrim: string;
+  markerSaved: string; markerCommunity: string; markerOsm: string; markerVisited: string; markerParking: string;
   // legacy aliases kept so every older screen keeps working
   forest: string; forestDark: string; moss: string; sand: string; card: string; waterLight: string;
   earth: string; warn: string; warnBg: string; dangerBg: string; white: string;
 }
 
-const base = { white: '#FFFFFF', earth: '#9A7B54', moss: '#6E9A59' };
+export interface Runtime {
+  dark: boolean; corner: number; density: number; cardStyle: 'elevated' | 'flat' | 'outlined' | 'glass'; textScale: number; fontId: string; bold: boolean;
+  buttonH: number; iconScale: number; motion: number; largeTargets: boolean; highContrast: boolean; screenReader: boolean; iconStyle: 'auto' | 'outline' | 'filled';
+}
+export const runtime: Runtime = { dark: false, corner: 1, density: 1, cardStyle: 'elevated', textScale: 1, fontId: 'inter', bold: false, buttonH: 1, iconScale: 1, motion: 1, largeTargets: false, highContrast: false, screenReader: false, iconStyle: 'auto' };
 
-export const lightPalette: Palette = {
-  ...base,
-  bg: '#F3F1EA', surface: '#FFFFFF', surface2: '#ECE9DF', surface3: '#E2DED1',
-  ink: '#121C17', muted: '#5B6961', faint: '#8B978F', line: 'rgba(18,28,23,0.09)',
-  primary: '#1F5A43', primaryDeep: '#133A2B', onPrimary: '#FFFFFF',
-  water: '#1B8FD0', waterDeep: '#0F6AA3', waterTint: '#DDF0FA',
-  amber: '#D98E1F', amberTint: '#FFF1D6',
-  danger: '#C8402F', dangerTint: '#FCE9E5', ok: '#2E7D4F', okTint: '#DDF3E5',
-  overlay: 'rgba(255,255,255,0.92)', scrim: 'rgba(8,16,12,0.55)',
-  forest: '#1F5A43', forestDark: '#133A2B', sand: '#F3F1EA', card: '#FFFFFF', waterLight: '#DDF0FA',
-  warn: '#B7791F', warnBg: '#FFF1D6', dangerBg: '#FCE9E5',
+const fallback: Palette = {
+  bg: '#F3F1EA', surface: '#FFFFFF', surface2: '#ECE9DF', surface3: '#E2DED1', ink: '#121C17', muted: '#5B6961', faint: '#8B978F', line: 'rgba(18,28,23,0.09)',
+  primary: '#1F5A43', primaryDeep: '#133A2B', onPrimary: '#FFFFFF', button: '#1F5A43', onButton: '#FFFFFF', navBg: '#FFFFFF', water: '#1B8FD0', waterDeep: '#0F6AA3', waterTint: '#DDF0FA',
+  amber: '#D98E1F', amberTint: '#FFF1D6', danger: '#C8402F', dangerTint: '#FCE9E5', ok: '#2E7D4F', okTint: '#DDF3E5', overlay: 'rgba(255,255,255,0.92)', scrim: 'rgba(8,16,12,0.55)',
+  markerSaved: '#1F5A43', markerCommunity: '#1B8FD0', markerOsm: '#7A8F86', markerVisited: '#8E5BD1', markerParking: '#3B6EA8',
+  forest: '#1F5A43', forestDark: '#133A2B', moss: '#6E9A59', sand: '#F3F1EA', card: '#FFFFFF', waterLight: '#DDF0FA', earth: '#9A7B54', warn: '#B7791F', warnBg: '#FFF1D6', dangerBg: '#FCE9E5', white: '#FFFFFF',
 };
-
-export const darkPalette: Palette = {
-  ...base,
-  bg: '#0C1310', surface: '#16201B', surface2: '#1E2B25', surface3: '#2A3A33',
-  ink: '#EDF3EF', muted: '#9AAAA1', faint: '#6F7F76', line: 'rgba(237,243,239,0.10)',
-  primary: '#3C9C73', primaryDeep: '#1F5A43', onPrimary: '#FFFFFF',
-  water: '#4FB4EE', waterDeep: '#2D8FCB', waterTint: '#15303F',
-  amber: '#F0B04A', amberTint: '#3A2E14',
-  danger: '#F0705E', dangerTint: '#3C1D18', ok: '#5CC48A', okTint: '#163626',
-  overlay: 'rgba(22,32,27,0.92)', scrim: 'rgba(0,0,0,0.62)',
-  forest: '#3C9C73', forestDark: '#0F2C21', sand: '#0C1310', card: '#16201B', waterLight: '#15303F',
-  warn: '#F0B04A', warnBg: '#3A2E14', dangerBg: '#3C1D18',
-};
-
-let current: Palette = lightPalette;
-let currentScheme: 'light' | 'dark' = 'light';
-export function applyScheme(s: 'light' | 'dark') { currentScheme = s; current = s === 'dark' ? darkPalette : lightPalette; }
-export const isDark = () => currentScheme === 'dark';
-
+let current: Palette = fallback;
+export function applyPalette(p: Palette, dark: boolean) { current = p; runtime.dark = dark; }
+export const isDark = () => runtime.dark;
 export const colors: Palette = new Proxy({} as Palette, { get: (_t, k) => (current as any)[k] });
 
-export const radius = { xs: 8, sm: 12, md: 18, lg: 26, xl: 34, pill: 999 };
-export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
+export const radius = {
+  get xs() { return 8 * runtime.corner; }, get sm() { return 12 * runtime.corner; }, get md() { return 18 * runtime.corner; },
+  get lg() { return 26 * runtime.corner; }, get xl() { return 34 * runtime.corner; }, pill: 999,
+};
+export const space = {
+  get xs() { return 4 * runtime.density; }, get sm() { return 8 * runtime.density; }, get md() { return 12 * runtime.density; },
+  get lg() { return 16 * runtime.density; }, get xl() { return 24 * runtime.density; }, get xxl() { return 32 * runtime.density; },
+};
+/** horizontal screen gutter */
+export const gutter = () => Math.round(18 * runtime.density);
 
 export const shadow = {
-  get card() {
-    return { shadowColor: '#000', shadowOpacity: currentScheme === 'dark' ? 0.4 : 0.1, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 };
-  },
-  get soft() {
-    return { shadowColor: '#000', shadowOpacity: currentScheme === 'dark' ? 0.3 : 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 };
-  },
-  get float() {
-    return { shadowColor: '#000', shadowOpacity: currentScheme === 'dark' ? 0.55 : 0.25, shadowRadius: 22, shadowOffset: { width: 0, height: 12 }, elevation: 12 };
-  },
+  get card() { return runtime.cardStyle === 'flat' || runtime.cardStyle === 'outlined' ? {} : { shadowColor: '#000', shadowOpacity: runtime.dark ? 0.4 : 0.1, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 }; },
+  get soft() { return runtime.cardStyle === 'flat' || runtime.cardStyle === 'outlined' ? {} : { shadowColor: '#000', shadowOpacity: runtime.dark ? 0.3 : 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 }; },
+  get float() { return { shadowColor: '#000', shadowOpacity: runtime.dark ? 0.55 : 0.25, shadowRadius: 22, shadowOffset: { width: 0, height: 12 }, elevation: 12 }; },
 };
-// legacy: spread-able card shadow
-export const shadowLegacy = shadow.card;
+/** Extra style a "card" gets from the chosen card appearance. */
+export const cardExtra = () => {
+  switch (runtime.cardStyle) {
+    case 'outlined': return { borderWidth: runtime.highContrast ? 2 : 1, borderColor: runtime.highContrast ? current.ink : current.line };
+    case 'glass': return { backgroundColor: current.overlay, borderWidth: 1, borderColor: current.line };
+    default: return runtime.highContrast ? { borderWidth: 1.5, borderColor: current.ink } : {};
+  }
+};
 
-export const FONT = { regular: 'Inter_400Regular', semi: 'Inter_600SemiBold', bold: 'Inter_700Bold', black: 'Inter_800ExtraBold' };
+export type FontSet = { regular: string; semi: string; bold: string; black: string };
+export const FONT_SETS: Record<string, FontSet> = {
+  inter: { regular: 'Inter_400Regular', semi: 'Inter_600SemiBold', bold: 'Inter_700Bold', black: 'Inter_800ExtraBold' },
+  nunito: { regular: 'Nunito_400Regular', semi: 'Nunito_600SemiBold', bold: 'Nunito_700Bold', black: 'Nunito_800ExtraBold' },
+  lora: { regular: 'Lora_400Regular', semi: 'Lora_600SemiBold', bold: 'Lora_700Bold', black: 'Lora_700Bold' },
+  atkinson: { regular: 'AtkinsonHyperlegible_400Regular', semi: 'AtkinsonHyperlegible_700Bold', bold: 'AtkinsonHyperlegible_700Bold', black: 'AtkinsonHyperlegible_700Bold' },
+};
+export const FONT = new Proxy({} as FontSet, { get: (_t, k) => (FONT_SETS[runtime.fontId] ?? FONT_SETS.inter)[k as keyof FontSet] });
 
 export const font = {
   get display() { return { fontSize: 34, lineHeight: 38, fontWeight: '800' as const, color: colors.ink, letterSpacing: -0.8 }; },

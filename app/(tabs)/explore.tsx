@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { themed } from '../../src/custom/themed';
 import { ActivityIndicator, FlatList, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../src/custom/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { Banner, Button, Chip, Empty, Pressy, Skeleton, Text } from '../../src/components/ui';
@@ -21,7 +22,7 @@ const FILTERS: { key: Filter; label: string; icon: any }[] = [
 ];
 const toCard = (i: ExploreItem): CardData => ({ key: i.key, name: i.name, kind: i.kind, photoUrl: i.photo?.url, credit: i.photo?.credit, location: i.town ? `Near ${i.town}` : null, distance_m: i.distance_m, rating: i.avg_rating, ratingCount: i.rating_count, desc: i.description, source: i.source });
 
-export default function Explore() {
+function Explore() {
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const { online, imperial, premium } = useApp();
@@ -132,3 +133,4 @@ export default function Explore() {
     </SafeAreaView>
   );
 }
+export default themed(Explore);

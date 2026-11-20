@@ -32,7 +32,12 @@ function Gate({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="save" options={{ title: 'Save this creek', presentation: 'modal' }} />
         <Stack.Screen name="auth" options={{ title: 'Account', presentation: 'modal' }} />
         <Stack.Screen name="premium" options={{ title: 'CreekFinder Premium', presentation: 'modal' }} />
-        <Stack.Screen name="alerts" options={{ title: 'Alerts & conditions' }} />
+        <Stack.Screen name="alerts" options={{ title: 'Alerts & notifications' }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="editor" options={{ title: 'Design editor' }} />
+        <Stack.Screen name="marketplace" options={{ title: 'Marketplace' }} />
+        <Stack.Screen name="folders" options={{ title: 'Folders' }} />
+        <Stack.Screen name="trips" options={{ title: 'Trip planner' }} />
         <Stack.Screen name="navigate" options={{ title: '', headerTransparent: true }} />
         <Stack.Screen name="track" options={{ title: '', headerTransparent: true }} />
         <Stack.Screen name="adventures" options={{ title: 'Adventure history' }} />

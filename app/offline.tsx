@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
@@ -22,7 +23,7 @@ const DETAIL = [{ label: 'Overview (to z12)', max: 12 }, { label: 'Standard (to 
 
 interface PackRow { id: string; name: string; styleKey: MapStyleKey; pct: number; state: string; size: number }
 
-export default function OfflineScreen() {
+function OfflineScreen() {
   const router = useRouter();
   const { premium, online } = useApp();
   const places = useDbQuery(() => listPlaces(), [], []);
@@ -122,3 +123,4 @@ export default function OfflineScreen() {
     </ScrollView>
   );
 }
+export default themed(OfflineScreen);

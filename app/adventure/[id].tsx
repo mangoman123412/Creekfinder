@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { themed } from '../../src/custom/themed';
 import { Dimensions, FlatList, Platform, ScrollView, View } from 'react-native';
 import { Text } from '../../src/components/ui';
 import { Alert } from '../../src/lib/alert';
@@ -18,7 +19,7 @@ import { colors, font, space } from '../../src/theme';
 
 const W = Dimensions.get('window').width;
 
-export default function AdventureDetail() {
+function AdventureDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const nav = useNavigation();
@@ -99,3 +100,4 @@ export default function AdventureDetail() {
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <View style={{ alignItems: 'center' }}><Text style={{ fontSize: 22, fontWeight: '900', color: colors.ink }}>{value}</Text><Text style={{ fontSize: 11.5, color: colors.muted, fontWeight: '700' }}>{label.toUpperCase()}</Text></View>
 );
+export default themed(AdventureDetail);

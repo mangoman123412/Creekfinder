@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Dimensions, FlatList, Modal, Platform, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../custom/Icon';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, font, radius, shadow, space } from '../theme';
 import { IconButton, Pill, Pressy, Skeleton, Text, type IconName } from './ui';
@@ -46,6 +46,21 @@ export function Fact({ icon, label, value, source, note, loading }: { icon: Icon
         )}
         {known && (source || note) ? <Text style={[font.small, { marginTop: 2 }]}>{[note, source].filter(Boolean).join(' · ')}</Text> : null}
       </View>
+    </View>
+  );
+}
+
+export interface FactItem { icon: IconName; label: string; value?: string | null; source?: string; note?: string; loading?: boolean }
+/** Compact layout: facts as a tile grid (value + label only). */
+export function FactGrid({ items }: { items: FactItem[] }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+      {items.map((f) => { const known = f.value != null && f.value !== ''; return (
+        <View key={f.label} style={[{ width: '48%', flexGrow: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: 12 }, shadow.soft]}>
+          <Ionicons name={f.icon} size={16} color={known ? colors.primary : colors.faint} />
+          {f.loading ? <Skeleton h={16} w={80} r={6} style={{ marginTop: 6 }} /> : <Text numberOfLines={2} style={{ fontSize: 15, fontWeight: known ? '800' : '400', marginTop: 4, color: known ? colors.ink : colors.faint, fontStyle: known ? 'normal' : 'italic' }}>{known ? f.value : 'Unknown'}</Text>}
+          <Text style={{ fontSize: 11, color: colors.muted, marginTop: 2 }}>{f.label}</Text>
+        </View>); })}
     </View>
   );
 }

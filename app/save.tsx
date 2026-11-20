@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import { Banner, Button, Card, Chip, Field, SectionTitle } from '../src/components/ui';
-import { addPhoto, deletePhoto, getPlace, listFolders, listPhotos, savePlace, countPlaces } from '../src/db/local';
+import { Ionicons } from '../src/custom/Icon';
+import { Banner, Button, Card, Chip, Field, SectionTitle, Stars } from '../src/components/ui';
+import { useSettings } from '../src/custom/store';
+import { flattenFolders } from '../src/custom/organize';
+import { addPhoto, deletePhoto, getPlace, listFolders, listPhotos, savePlace, countPlaces, parseTags, isInPrivateCollection } from '../src/db/local';
 import { getPreciseFix, ensureForegroundPermission, openSettings } from '../src/lib/location';
 import { pickPhotos, takePhoto } from '../src/lib/photos';
 import { PLACE_KINDS, type Folder, type Photo, type PlaceKind, type Visibility } from '../src/types';
@@ -17,7 +20,7 @@ import { formatCoords } from '../src/lib/geo';
 import { FREE_PLACE_LIMIT } from '../src/config';
 import { hasBackend, FREE_PHOTOS_PER_PLACE, PREMIUM_PHOTOS_PER_PLACE } from '../src/config';
 
-export default function SaveScreen() {
+function SaveScreen() {
   const router = useRouter();
   const { user, premium } = useApp();
   const q = useLocalSearchParams<{ id?: string; lat?: string; lng?: string; name?: string; kind?: string; source?: string; desc?: string; from?: string }>();
@@ -31,7 +34,13 @@ export default function SaveScreen() {
   const [depth, setDepth] = useState('');
   const [surroundings, setSurroundings] = useState('');
   const [notes, setNotes] = useState('');
-  const [visibility, setVisibility] = useState<Visibility>('private');
+  const settingsP = useSettings().privacy;
+  const [visibility, setVisibility] = useState<Visibility>(settingsP.defaultVisibility);
+  const [favorite, setFavorite] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [rating, setRating] = useState<number | null>(null);
+  const [privateColl, setPrivateColl] = useState(false);
   const [coord, setCoord] = useState<{ lat: number; lng: number; acc: number | null; alt: number | null } | null>(
     q.lat && q.lng ? { lat: Number(q.lat), lng: Number(q.lng), acc: null, alt: null } : null);
   const [gpsState, setGpsState] = useState<'idle' | 'locking' | 'denied' | 'error'>('idle');
@@ -58,6 +67,7 @@ export default function SaveScreen() {
         if (!p) return;
         setName(p.name); setKind(p.kind); setFolderId(p.folder_id); setDescription(p.description ?? ''); setWater(p.water_notes ?? '');
         setDepth(p.depth_notes ?? ''); setSurroundings(p.surroundings ?? ''); setNotes(p.notes ?? ''); setVisibility(p.visibility);
+        setFavorite(!!p.favorite); setTags(parseTags(p.tags)); setRating(p.rating);
         setCoord({ lat: p.lat, lng: p.lng, acc: p.accuracy_m, alt: p.altitude_m });
       });
       void listPhotos(q.id!).then(setExisting);
@@ -68,13 +78,14 @@ export default function SaveScreen() {
     if (!coord) { Alert.alert('No location yet', 'Wait for the GPS to lock, or tap "Refresh GPS".'); return; }
     if (!name.trim()) { Alert.alert('Give it a name', 'Add a name so you can find it later, like "Mossy Falls".'); return; }
     if (!editing && !premium && (await countPlaces()) >= FREE_PLACE_LIMIT) { router.replace({ pathname: '/premium', params: { reason: 'limit' } }); return; }
+    if (settingsP.confirmShare && visibility === 'public' && !privateColl && !editing) { const ok = await new Promise<boolean>((res) => Alert.alert('Share publicly?', 'Everyone on CreekFinder will see this place’s exact location, photos and notes.', [{ text: 'Keep private', style: 'cancel', onPress: () => res(false) }, { text: 'Share', onPress: () => res(true) }])); if (!ok) { setVisibility('private'); return; } }
     if (visibility === 'public' && !user) { Alert.alert('Sign in to share', 'Sharing publicly needs a free account.', [{ text: 'Not now', style: 'cancel' }, { text: 'Sign in', onPress: () => router.push('/auth') }]); return; }
     setSaving(true);
     try {
       const id = await savePlace({
         id: q.id, name, kind, lat: coord.lat, lng: coord.lng, accuracy_m: coord.acc, altitude_m: coord.alt, description: description.trim() || null,
         water_notes: water.trim() || null, depth_notes: depth.trim() || null, surroundings: surroundings.trim() || null, notes: notes.trim() || null,
-        folder_id: folderId, visibility, source_place_id: q.source === 'community' ? (q.from ?? null) : null,
+        folder_id: folderId, visibility: privateColl ? 'private' : visibility, source_place_id: q.source === 'community' ? (q.from ?? null) : null, favorite: favorite ? 1 : 0, tags, rating,
       });
       for (const r of removed) await deletePhoto(r);
       for (const uri of newPhotos) await addPhoto({ place_id: id, local_uri: uri });
@@ -139,8 +150,8 @@ export default function SaveScreen() {
 
         <Text style={labelStyle}>Save to folder</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: space.md }}>
-          <Chip label="None" active={folderId == null} onPress={() => setFolderId(null)} />
-          {folders.map((f) => <Chip key={f.id} label={f.name} icon={f.icon as any} active={folderId === f.id} onPress={() => setFolderId(f.id)} />)}
+          <Chip label="None" active={folderId == null} onPress={() => { setFolderId(null); setPrivateColl(false); }} />
+          {flattenFolders(folders).map(({ folder: f, depth }) => <Chip key={f.id} label={`${depth ? '↳ ' : ''}${f.name}${f.private ? ' 🔒' : ''}`} icon={f.icon as any} active={folderId === f.id} onPress={() => { setFolderId(f.id); void isInPrivateCollection(f.id).then((v) => { setPrivateColl(v); if (v) setVisibility('private'); }); }} />)}
         </ScrollView>
 
         <SectionTitle>Photos</SectionTitle>
@@ -156,6 +167,19 @@ export default function SaveScreen() {
         </View>
         <Text style={[font.small, { marginTop: 6 }]}>Photos are saved on your phone right away and upload automatically when you have signal.</Text>
 
+        <SectionTitle>Organize</SectionTitle>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Chip label={favorite ? 'Favorite ♥' : 'Mark as favorite'} icon={favorite ? 'heart' : 'heart-outline'} active={favorite} onPress={() => setFavorite((v) => !v)} />
+          </View>
+          <Text style={[labelStyle, { marginTop: 12 }]}>My rating</Text>
+          <Stars value={rating ?? 0} size={30} onChange={(n) => setRating(rating === n ? null : n)} />
+          <Text style={[labelStyle, { marginTop: 12 }]}>Tags</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>{tags.map((t) => <Chip key={t} label={`#${t} ✕`} active onPress={() => setTags(tags.filter((x) => x !== t))} />)}</View>
+          <Field label="" value={tagInput} onChangeText={setTagInput} placeholder="Add a tag and press return (e.g. shady, kid-friendly)" maxLength={24} returnKeyType="done" autoCapitalize="none"
+            onSubmitEditing={() => { const t = tagInput.trim().toLowerCase().replace(/[^a-z0-9\- ]/g, '').replace(/\s+/g, '-'); if (t && !tags.includes(t) && tags.length < 12) setTags([...tags, t]); setTagInput(''); }} />
+        </Card>
+
         <SectionTitle>Details</SectionTitle>
         <Field label="What makes it special?" value={description} onChangeText={setDescription} multiline placeholder="Cold, clear water under a rock ledge…" />
         <Field label="Water (clarity, flow, temperature)" value={water} onChangeText={setWater} multiline placeholder="Clear, slow-moving, shallow riffles…" />
@@ -167,7 +191,7 @@ export default function SaveScreen() {
         <Card>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Chip label="Private (only me)" icon="lock-closed" active={visibility === 'private'} onPress={() => setVisibility('private')} />
-            <Chip label="Public" icon="globe" active={visibility === 'public'} onPress={() => setVisibility('public')} />
+            <Chip label="Public" icon="globe" active={visibility === 'public'} onPress={() => { if (privateColl) { Alert.alert('Private collection', 'This folder is a private collection, so its places can’t be made public.'); return; } setVisibility('public'); }} />
           </View>
           <Text style={[font.small, { marginTop: 10 }]}>
             {visibility === 'private'
@@ -196,3 +220,4 @@ function Thumb({ uri, onRemove }: { uri: string | null; onRemove: () => void }) 
     </View>
   );
 }
+export default themed(SaveScreen);

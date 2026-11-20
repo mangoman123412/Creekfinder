@@ -77,6 +77,11 @@ export async function getNearbyGauges(lat: number, lng: number, maxResults = 4):
 
 import { describeWeather } from './weatherPure';
 export { describeWeather } from './weatherPure';
+export interface DayForecast { date: string; code: number; maxC: number; minC: number; label: string; icon: string }
+export async function getDailyForecast(lat: number, lng: number): Promise<DayForecast[]> {
+  const d = await fetchJson<any>(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lng.toFixed(3)}&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=4&timezone=auto`, { timeoutMs: 12000 });
+  return (d.daily?.time ?? []).map((t: string, i: number) => ({ date: t, code: d.daily.weather_code[i], maxC: d.daily.temperature_2m_max[i], minC: d.daily.temperature_2m_min[i], ...describeWeather(d.daily.weather_code[i], true) }));
+}
 export interface CurrentWeather { tempF: number; tempC: number; code: number; isDay: boolean; label: string; icon: string }
 /** Global current conditions (Open-Meteo, no key). */
 export async function getCurrentWeather(lat: number, lng: number): Promise<CurrentWeather> {

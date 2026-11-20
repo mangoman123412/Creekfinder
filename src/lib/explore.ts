@@ -126,3 +126,16 @@ export async function enrichItems(items: ExploreItem[], center: { lat: number; l
   if (tw.status === 'fulfilled') for (const it of items) { const t = nearestTown(tw.value, it); if (t && t.distance_m < 30000) { it.town = t.name; it.townDist = t.distance_m; } }
   return items;
 }
+
+/** Public parking areas inside a map view (OpenStreetMap). */
+export async function searchParking(b: [number, number, number, number]): Promise<ExploreItem[]> {
+  const [w, s, e, n] = b;
+  const q = `[out:json][timeout:20];nwr["amenity"="parking"]["access"!~"private|customers|no"](${s},${w},${n},${e});out center tags 120;`;
+  for (const base of OVERPASS) {
+    try {
+      const d = await fetchJson<{ elements: OsmEl[] }>(`${base}?data=${encodeURIComponent(q)}`, { timeoutMs: 25000, headers: { 'User-Agent': config.userAgent } });
+      return d.elements.map((el) => ({ key: `park-${el.type}-${el.id}`, source: 'osm' as const, name: el.tags?.name ?? 'Parking', kind: 'other' as const, lat: (el.lat ?? el.center?.lat)!, lng: (el.lon ?? el.center?.lon)!, osmId: `${el.type}/${el.id}` })).filter((x) => x.lat != null);
+    } catch {}
+  }
+  return [];
+}

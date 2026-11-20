@@ -1,18 +1,22 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text as RNText, TextInput, View, type StyleProp, type TextInputProps, type TextProps, type TextStyle, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../custom/Icon';
 import * as Haptics from 'expo-haptics';
-import { FONT, colors, font, radius, shadow, space } from '../theme';
+import { FONT, cardExtra, colors, font, radius, runtime, shadow, space } from '../theme';
+import { pressScale } from '../custom/motion';
 
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-/** App text: picks the Inter weight from fontWeight. */
+/** App text: honours the user's font family, text size and bold-text settings. */
 export function Text({ style, ...p }: TextProps) {
   const flat = (StyleSheet.flatten(style) ?? {}) as TextStyle;
-  const w = String(flat.fontWeight ?? '400');
+  let w = String(flat.fontWeight ?? '400');
+  if (runtime.bold) w = w === '400' ? '600' : w === '500' || w === '600' ? '700' : w;
   const family = w === '800' || w === '900' ? FONT.black : w === '700' || w === 'bold' ? FONT.bold : w === '600' || w === '500' ? FONT.semi : FONT.regular;
-  return <RNText {...p} style={[{ fontFamily: family, color: colors.ink }, style, { fontWeight: undefined }]} />;
+  const k = runtime.textScale;
+  const size = (flat.fontSize ?? 14) * k;
+  return <RNText {...p} style={[{ fontFamily: family, color: colors.ink }, style, { fontWeight: undefined, fontSize: size, lineHeight: flat.lineHeight ? flat.lineHeight * k : undefined }]} />;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -25,8 +29,8 @@ export function Pressy({ children, onPress, style, scale = 0.96, disabled, acces
   const a = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   return (
     <AnimatedPressable
-      accessibilityRole="button" accessibilityLabel={accessibilityLabel} disabled={disabled} hitSlop={hitSlop}
-      onPressIn={() => { s.value = withSpring(scale, { damping: 18, stiffness: 400 }); }}
+      accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityHint={runtime.screenReader && accessibilityLabel ? `Double tap to ${accessibilityLabel.toLowerCase()}` : undefined} disabled={disabled} hitSlop={runtime.largeTargets ? Math.max(hitSlop ?? 0, 12) : hitSlop}
+      onPressIn={() => { s.value = withSpring(pressScale(scale), { damping: 18, stiffness: 400 }); }}
       onPressOut={() => { s.value = withSpring(1, { damping: 14, stiffness: 300 }); }}
       onPress={onPress} onLongPress={onLongPress} style={[a, style]}
     >{children}</AnimatedPressable>
@@ -36,13 +40,13 @@ export function Pressy({ children, onPress, style, scale = 0.96, disabled, acces
 export function Button({ title, onPress, icon, variant = 'primary', loading, disabled, style, small }: {
   title: string; onPress: () => void; icon?: IconName; variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'water' | 'glass'; loading?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle>; small?: boolean;
 }) {
-  const bg = { primary: colors.primary, secondary: colors.surface2, danger: colors.danger, ghost: 'transparent', water: colors.water, glass: colors.overlay }[variant];
-  const fg = variant === 'secondary' || variant === 'glass' ? colors.ink : variant === 'ghost' ? colors.primary : '#FFFFFF';
+  const bg = { primary: colors.button, secondary: colors.surface2, danger: colors.danger, ghost: 'transparent', water: colors.water, glass: colors.overlay }[variant];
+  const fg = variant === 'secondary' || variant === 'glass' ? colors.ink : variant === 'ghost' ? colors.primary : variant === 'primary' ? colors.onButton : '#FFFFFF';
   return (
     <Pressy
       disabled={disabled || loading} accessibilityLabel={title}
       onPress={() => { void Haptics.selectionAsync().catch(() => {}); onPress(); }}
-      style={[{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingVertical: small ? 10 : 15, paddingHorizontal: small ? 16 : 22, borderRadius: radius.pill, minHeight: small ? 42 : 54, backgroundColor: bg, opacity: disabled ? 0.45 : 1 },
+      style={[{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingVertical: (small ? 10 : 15) * runtime.buttonH, paddingHorizontal: small ? 16 : 22, borderRadius: radius.pill, minHeight: (small ? 42 : 54) * runtime.buttonH, backgroundColor: bg, opacity: disabled ? 0.45 : 1 },
         variant === 'primary' && shadow.soft, style]}
     >
       {loading ? <ActivityIndicator color={fg} /> : (<>
@@ -64,7 +68,7 @@ export function IconButton({ icon, onPress, label, size = 44, active, badge, sty
 }
 
 export function Card({ children, style, flat }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; flat?: boolean }) {
-  return <View style={[{ backgroundColor: colors.surface, borderRadius: radius.md, padding: space.lg }, !flat && shadow.soft, style]}>{children}</View>;
+  return <View style={[{ backgroundColor: colors.surface, borderRadius: radius.md, padding: space.lg }, !flat && shadow.soft, cardExtra(), style]}>{children}</View>;
 }
 
 export function Chip({ label, active, onPress, icon }: { label: string; active?: boolean; onPress?: () => void; icon?: IconName }) {
@@ -92,7 +96,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
     <View style={{ marginBottom: space.md }}>
       <Text style={[font.label, { marginBottom: 7 }]}>{label}</Text>
       <TextInput placeholderTextColor={colors.faint} {...props}
-        style={[{ backgroundColor: colors.surface, borderRadius: radius.sm, paddingHorizontal: 15, paddingVertical: 13, fontSize: 16, color: colors.ink, fontFamily: FONT.regular }, props.multiline && { minHeight: 96, textAlignVertical: 'top' }, props.style]} />
+        style={[{ backgroundColor: colors.surface, borderRadius: radius.sm, paddingHorizontal: 15, paddingVertical: 13, fontSize: 16 * runtime.textScale, color: colors.ink, fontFamily: FONT.regular }, props.multiline && { minHeight: 96, textAlignVertical: 'top' }, props.style]} />
     </View>
   );
 }
@@ -135,7 +139,7 @@ export function Empty({ icon, title, body, action }: { icon: IconName; title: st
 export function Group({ children }: { children: React.ReactNode }) {
   const kids = React.Children.toArray(children);
   return (
-    <View style={[{ borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.surface }, shadow.soft]}>
+    <View style={[{ borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.surface }, shadow.soft, cardExtra()]}>
       {kids.map((k, i) => (<View key={i}>{i > 0 && <View style={{ height: 1, backgroundColor: colors.line, marginLeft: 66 }} />}{k}</View>))}
     </View>
   );
@@ -143,7 +147,7 @@ export function Group({ children }: { children: React.ReactNode }) {
 
 export function Row({ icon, title, subtitle, onPress, right, danger }: { icon: IconName; title: string; subtitle?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) {
   return (
-    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: space.lg, backgroundColor: pressed ? colors.surface2 : 'transparent' })}>
+    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13 * runtime.density, paddingHorizontal: space.lg, backgroundColor: pressed ? colors.surface2 : 'transparent' })}>
       <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: danger ? colors.dangerTint : colors.waterTint, alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name={icon} size={20} color={danger ? colors.danger : colors.water} />
       </View>
@@ -171,7 +175,7 @@ export function Stars({ value, onChange, size = 18 }: { value: number; onChange?
 /** Shimmering placeholder block while real data loads. */
 export function Skeleton({ w, h, r = 12, style }: { w?: number | string; h: number; r?: number; style?: StyleProp<ViewStyle> }) {
   const o = useSharedValue(0.5);
-  useEffect(() => { o.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0.5, { duration: 700 })), -1); }, [o]);
+  useEffect(() => { if (runtime.motion <= 0) { o.value = 0.7; return; } o.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0.5, { duration: 700 })), -1); }, [o]);
   const a = useAnimatedStyle(() => ({ opacity: o.value }));
   return <Animated.View style={[{ width: (w ?? '100%') as any, height: h, borderRadius: r, backgroundColor: colors.surface3 }, a, style]} />;
 }

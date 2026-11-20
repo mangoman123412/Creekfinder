@@ -312,3 +312,75 @@ create policy photos_contrib_insert on public.photos for insert to authenticated
 
 -- Photo reports
 alter table public.reports add column if not exists photo_id uuid references public.photos(id) on delete cascade;
+
+-- ================================================================ v3: organisation (favorites, tags, ratings, folder colours/nesting/private)
+alter table public.places  add column if not exists favorite boolean not null default false;
+alter table public.places  add column if not exists tags jsonb not null default '[]'::jsonb;
+alter table public.places  add column if not exists rating smallint check (rating between 1 and 5);
+alter table public.folders add column if not exists color text;
+alter table public.folders add column if not exists parent_id text;
+alter table public.folders add column if not exists private boolean not null default false;
+
+-- ================================================================ v3: customization sync, backups and marketplace
+create table if not exists public.user_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  data jsonb not null,                                  -- the whole Library (profiles, themes, map presets). No personal data besides preferences.
+  client_updated_at bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  constraint user_settings_size check (pg_column_size(data) < 400000)
+);
+create table if not exists public.settings_backups (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  label text not null default 'Backup',
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  constraint settings_backups_size check (pg_column_size(data) < 400000)
+);
+create index if not exists settings_backups_user_idx on public.settings_backups(user_id, created_at desc);
+
+create table if not exists public.shared_designs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,        -- null = official CreekFinder design
+  kind text not null check (kind in ('theme','layout','profile','mappreset')),
+  name text not null check (char_length(name) between 1 and 40),
+  description text check (char_length(description) <= 200),
+  payload jsonb not null,                                          -- DATA ONLY. The app validates & whitelists it; it is never executed.
+  official boolean not null default false,
+  hidden boolean not null default false,
+  downloads int not null default 0,
+  created_at timestamptz not null default now(),
+  constraint shared_designs_size check (pg_column_size(payload) < 40000)
+);
+create table if not exists public.design_ratings (
+  design_id uuid not null references public.shared_designs(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  stars smallint not null check (stars between 1 and 5),
+  primary key (design_id, user_id)
+);
+
+alter table public.user_settings enable row level security;
+alter table public.settings_backups enable row level security;
+alter table public.shared_designs enable row level security;
+alter table public.design_ratings enable row level security;
+
+drop policy if exists user_settings_owner on public.user_settings;
+create policy user_settings_owner on public.user_settings for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists backups_owner on public.settings_backups;
+create policy backups_owner on public.settings_backups for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists designs_read on public.shared_designs;
+create policy designs_read on public.shared_designs for select to authenticated using (hidden = false);
+drop policy if exists designs_insert on public.shared_designs;
+create policy designs_insert on public.shared_designs for insert to authenticated with check (user_id = auth.uid() and official = false and hidden = false);
+drop policy if exists designs_delete on public.shared_designs;
+create policy designs_delete on public.shared_designs for delete to authenticated using (user_id = auth.uid());
+drop policy if exists design_ratings_read on public.design_ratings;
+create policy design_ratings_read on public.design_ratings for select to authenticated using (true);
+drop policy if exists design_ratings_write on public.design_ratings;
+create policy design_ratings_write on public.design_ratings for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create or replace function public.bump_design_downloads(design uuid) returns void
+language sql security definer set search_path = public as $$ update public.shared_designs set downloads = downloads + 1 where id = design and hidden = false $$;
+revoke all on function public.bump_design_downloads(uuid) from public, anon;
+grant execute on function public.bump_design_downloads(uuid) to authenticated;

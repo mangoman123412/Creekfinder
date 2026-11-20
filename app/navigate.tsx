@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../src/custom/Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { CreekMap } from '../src/components/CreekMap';
@@ -23,7 +24,7 @@ type Target = { name: string; lat: number; lng: number };
  *  - /navigate?lat&lng&name        : guide to any coordinate
  *  - /navigate?adventure=<id>      : retrace a recorded track back to its start
  */
-export default function Navigate() {
+function Navigate() {
   const s = getS();
   const q = useLocalSearchParams<{ id?: string; lat?: string; lng?: string; name?: string; adventure?: string }>();
   const router = useRouter();
@@ -119,3 +120,4 @@ const getS = () => StyleSheet.create({
   panel: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, padding: space.lg, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadow.float },
   arrowWrap: { width: 76, height: 76, borderRadius: radius.pill, backgroundColor: colors.waterLight, alignItems: 'center', justifyContent: 'center' },
 });
+export default themed(Navigate);

@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Switch, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../src/custom/Icon';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { Alert } from '../src/lib/alert';
-import { Banner, Button, Card, Group, IconButton, Pill, Row, Stars, Text } from '../src/components/ui';
-import { Fact, FactCard, FeatureList, Gallery, GuideSection, SpeciesRow, type GalleryPhoto } from '../src/components/GuideBits';
+import { Banner, Button, Card, Group, IconButton, Pill, Pressy, Row, Stars, Text } from '../src/components/ui';
+import { Fact, FactCard, FactGrid, FeatureList, Gallery, GuideSection, SpeciesRow, type FactItem, type GalleryPhoto } from '../src/components/GuideBits';
 import { SourceBadge, openUrl } from '../src/components/Bits';
 import { CreekMap } from '../src/components/CreekMap';
 import { SafetyPanel } from '../src/components/SafetyPanel';
-import { addPhoto, deletePlace, getPlace, listFolders, listPhotos, movePlaceToFolder, setVisibility } from '../src/db/local';
+import { addPhoto, addVisit, deletePlace, getPlace, listFolders, listPhotos, listPlaces, movePlaceToFolder, setFavorite, setVisibility, visitsNear, isInPrivateCollection } from '../src/db/local';
+import { useSettings } from '../src/custom/store';
+import { DETAIL_META, type DetailSectionId } from '../src/custom/schema';
 import { useDbQuery, useLoad, usePhotoUris } from '../src/state/hooks';
 import { useApp } from '../src/state/app';
 import { watchFixes } from '../src/lib/location';
@@ -45,7 +48,7 @@ const waterwayLabel = (t: Record<string, string> | null, kind: string) => {
 const numTag = (v?: string): number | null => { if (!v) return null; const n = parseFloat(v.replace(',', '.')); return isFinite(n) ? n : null; };
 const turbidityLabel = (n: number) => (n < 5 ? 'Clear' : n < 25 ? 'Slightly cloudy' : n < 100 ? 'Cloudy' : 'Very turbid');
 
-export default function CreekGuide() {
+function CreekGuide() {
   const q = useLocalSearchParams<{ source: Src; id?: string; name?: string; kind?: string; lat?: string; lng?: string; osm?: string; desc?: string }>();
   const source = (q.source ?? 'osm') as Src;
   const router = useRouter();
@@ -88,6 +91,18 @@ export default function CreekGuide() {
   const ownPhotos = useDbQuery(() => (source === 'saved' ? listPhotos(q.id!) : Promise.resolve([])), [q.id, source], []);
   const ownUris = usePhotoUris(ownPhotos.data);
   const folders = useDbQuery(listFolders, [], []);
+  const settings = useSettings();
+  const [layoutOv, setLayoutOv] = useState<'compact' | 'standard' | 'detailed' | null>(null);
+  const layout = layoutOv ?? settings.detail.layout;
+  const visitsHere = useDbQuery(() => (ready ? visitsNear(lat, lng, 150) : Promise.resolve([])), [ready, lat, lng], []);
+  const allPlaces = useDbQuery(() => listPlaces(), [], []);
+  // optional auto check-in when you are standing at the spot (Settings -> Privacy)
+  useEffect(() => {
+    if (!settings.privacy.autoCheckIn || !ready || dist == null || dist > 120) return;
+    const today = new Date().toDateString();
+    if (visitsHere.data.some((v) => new Date(v.ts).toDateString() === today)) return;
+    void addVisit({ place_id: source === 'saved' ? q.id! : null, name: ent!.name, kind: ent!.kind, lat, lng, note: 'Auto check-in' });
+  }, [dist, ready, settings.privacy.autoCheckIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------ photos
   const photos: GalleryPhoto[] = useMemo(() => {
@@ -169,6 +184,7 @@ export default function CreekGuide() {
     else void setVisibility(p.id, 'private');
   };
   const folder = folders.data.find((f) => f.id === p?.folder_id);
+  const privateColl = !!folder && (folder.private === 1 || folders.data.some((f) => f.private === 1 && f.id === folder.parent_id));
   const doReport = () => needAuth(() => {
     const reasons: [string, ReportReason][] = [['Incorrect information', 'incorrect'], ['Dangerous conditions', 'dangerous'], ['Private property / no access', 'private_property'], ['Inappropriate content', 'inappropriate'], ['Spam', 'spam']];
     Alert.alert('Report this place', 'What is wrong?', [...reasons.map(([tt, rr]) => ({ text: tt, onPress: async () => { try { await report(user!.id, { placeId: q.id!, reason: rr }); Alert.alert('Thank you', 'We will review this report.'); } catch (e: any) { Alert.alert('Could not report', e.message); } } })), { text: 'Cancel', style: 'cancel' as const }]);
@@ -179,13 +195,170 @@ export default function CreekGuide() {
   const otherPlants = (plants.data ?? []).filter((s) => !isTree(s.name));
   const mapPins = [{ id: 'here', lat, lng, name: ent.name, group: 'target' as const }];
 
+  // ---------------------------------------------------------------- customizable sections
+  const order = settings.detail.sections.filter((s) => s.visible).map((s) => s.id);
+  const cap = layout === 'compact' ? 2 : layout === 'standard' ? 4 : 8;
+  const showSrc = layout !== 'compact';
+  const galleryVisible = order.includes('gallery'); const galleryFirst = order[0] === 'gallery';
+  const heroPhotos = galleryVisible && galleryFirst ? photos : [];
+  const loadingSurr = surr.loading && online;
+  const feat = (list: any[] | undefined) => (surr.data ? list ?? [] : loadingSurr ? null : []);
+  const nearSaved = allPlaces.data.filter((x) => !(isSaved && x.id === q.id) && haversine({ lat, lng }, x) < 15000).sort((a, b) => haversine({ lat, lng }, a) - haversine({ lat, lng }, b)).slice(0, cap);
+
+  const factOf = (id: DetailSectionId): FactItem | null => {
+    switch (id) {
+      case 'elevation': return { icon: 'trending-up', label: 'Elevation above sea level', value: elevText, source: 'Terrain data (Open-Meteo)', loading: elev.loading && online };
+      case 'depth': return { icon: 'arrow-down', label: 'Depth', value: depthTag != null ? (imperial ? `${Math.round(depthTag * 3.28)} ft` : `${depthTag} m`) : depthNote ? `“${depthNote}”` : null, source: depthTag != null ? 'OpenStreetMap tag' : 'Explorer report' };
+      case 'clarity': return { icon: 'eye', label: 'Water clarity', value: gTurb ? `${turbidityLabel(gTurb.v)} (${gTurb.v} FNU)` : waterNote ? `“${waterNote}”` : null, source: gTurb ? gSrc(gTurb) : 'Explorer report', loading: gauges.loading && online };
+      case 'temperature': return { icon: 'thermometer', label: 'Water temperature', value: gTemp ? (imperial ? `${(gTemp.v * 9 / 5 + 32).toFixed(1)}°F` : `${gTemp.v.toFixed(1)}°C`) : null, source: gSrc(gTemp), loading: gauges.loading && online };
+      case 'flow': return { icon: 'speedometer', label: 'Flow conditions', value: gFlow ? `${Math.round(gFlow.v).toLocaleString()} ft³/s` : null, source: gSrc(gFlow), note: gLevel ? `Gauge height ${gLevel.v.toFixed(2)} ft` : undefined, loading: gauges.loading && online };
+      case 'width': return { icon: 'resize', label: 'Creek width', value: width != null ? (imperial ? `${Math.round(width * 3.28)} ft` : `${width} m`) : null, source: 'OpenStreetMap tag' };
+      default: return null;
+    }
+  };
+  const isWater = (id: DetailSectionId) => ['depth', 'clarity', 'temperature', 'flow', 'width'].includes(id);
+  const Facts = ({ items }: { items: FactItem[] }) => (layout === 'compact' ? <FactGrid items={items} /> : <FactCard>{items.map((f) => <Fact key={f.label} {...f} source={showSrc ? f.source : undefined} />)}</FactCard>);
+
+  const section = (id: DetailSectionId): React.ReactNode => {
+    switch (id) {
+      case 'gallery':
+        return galleryFirst ? null : (
+          <GuideSection key={id} icon="images" title="Photos">
+            {photos.length === 0 ? <Text style={[font.small, { fontStyle: 'italic', color: colors.faint }]}>No photos yet — be the first to add one.</Text> : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -18 }} contentContainerStyle={{ paddingHorizontal: 18, gap: 10 }}>
+                {photos.map((ph) => <Animated.Image key={ph.id} source={{ uri: ph.uri }} style={{ width: 200, height: 140, borderRadius: radius.md }} />)}
+              </ScrollView>)}
+          </GuideSection>);
+      case 'coordinates':
+        return (
+          <GuideSection key={id} icon="location" title="Location & GPS">
+            <Facts items={[
+              { icon: 'pin', label: 'GPS coordinates', value: formatCoords(lat, lng, 6), note: formatDMS(lat, lng) },
+              ...(layout !== 'compact' ? [{ icon: 'compass', label: 'Latitude · Longitude', value: `${Math.abs(lat).toFixed(6)}° ${lat >= 0 ? 'N' : 'S'}  ·  ${Math.abs(lng).toFixed(6)}° ${lng >= 0 ? 'E' : 'W'}` } as FactItem] : []),
+              { icon: 'map', label: 'County', value: r?.county, source: 'OpenStreetMap', loading: region.loading && online },
+              { icon: 'flag', label: 'State / region', value: r?.state, source: 'OpenStreetMap', loading: region.loading && online },
+              { icon: 'business', label: 'Nearest town', value: r?.town, loading: region.loading && online },
+              ...(layout !== 'compact' ? [{ icon: 'navigate', label: 'Distance from you', value: dist != null ? formatDistance(dist, imperial) : null, note: 'Straight-line' } as FactItem] : []),
+            ]} />
+            <View style={{ height: layout === 'compact' ? 150 : 230, borderRadius: radius.md, overflow: 'hidden', marginTop: space.md, backgroundColor: colors.surface2 }}>
+              <CreekMap styleKey="satellite" cameraRef={cam} pins={mapPins} showUser={false} attributionBottom={4} initial={{ center: [lng, lat], zoom: 15 }} />
+              <View style={{ position: 'absolute', right: 10, bottom: 26 }}><IconButton size={40} icon="expand" label="Open on full map" onPress={() => router.push({ pathname: '/(tabs)/map', params: { lat: String(lat), lng: String(lng), zoom: '16' } })} /></View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <Button small variant="secondary" icon="copy" title="Copy" style={{ flex: 1 }} onPress={async () => { await copyCoords(lat, lng); Alert.alert('Copied', 'Coordinates copied.'); }} />
+              <Button small variant="secondary" icon="share" title="Share location" style={{ flex: 1 }} onPress={() => shareLocation(ent.name, lat, lng)} />
+            </View>
+          </GuideSection>);
+      case 'elevation': { const f = factOf('elevation')!; return <GuideSection key={id} icon="trending-up" title="Elevation"><Facts items={[f]} /></GuideSection>; }
+      case 'depth': case 'clarity': case 'temperature': case 'flow': case 'width': return null; // rendered as one grouped "Water" block below
+      case 'waterfalls': return <GuideSection key={id} icon="arrow-down-circle" title="Nearby waterfalls"><FeatureList icon="arrow-down-circle" max={cap} items={feat(surr.data?.waterfalls.filter((f) => f.distance_m > 25))} empty="No mapped waterfalls nearby" imperial={imperial} /></GuideSection>;
+      case 'trails': return <GuideSection key={id} icon="walk" title="Hiking trails"><FeatureList icon="walk" max={cap} items={feat(surr.data?.trails)} empty="No named trails mapped nearby" imperial={imperial} /></GuideSection>;
+      case 'terrain':
+        return (
+          <GuideSection key={id} icon="leaf" title="Surrounding terrain" sub="Rocks (OpenStreetMap) · plants & wildlife (iNaturalist, ≤3 km)">
+            <Sub title="Rock formations & cliffs"><FeatureList icon="triangle" max={cap} items={feat(surr.data?.rocks)} empty="No mapped rock formations nearby" imperial={imperial} /></Sub>
+            {layout !== 'compact' && <Sub title="Trees"><SpeciesRow items={plants.data ? trees.slice(0, layout === 'detailed' ? 12 : 8) : plants.loading && online ? null : []} empty="No tree observations recorded nearby" /></Sub>}
+            {layout === 'detailed' && <Sub title="Other plants"><SpeciesRow items={plants.data ? otherPlants.slice(0, 10) : plants.loading && online ? null : []} empty="No plant observations recorded nearby" /></Sub>}
+            {layout !== 'compact' && <Sub title="Wildlife observations"><SpeciesRow items={wild.data ? wild.data : wild.loading && online ? null : []} empty="No wildlife observations recorded nearby" /></Sub>}
+          </GuideSection>);
+      case 'parking':
+        return (
+          <GuideSection key={id} icon="car" title="Parking & roads">
+            <Facts items={[
+              { icon: 'car', label: 'Nearest parking area', value: park ? `${park.name} · ${formatDistance(park.distance_m, imperial)} away` : null, source: 'OpenStreetMap (public lots only)', note: park ? 'Straight-line distance' : 'No mapped public parking within 4 km', loading: loadingSurr },
+              { icon: 'trail-sign', label: 'Nearest road', value: road ? `${road.name} · ${formatDistance(road.distance_m, imperial)}` : null, source: 'OpenStreetMap', loading: loadingSurr },
+            ]} />
+          </GuideSection>);
+      case 'access':
+        return (
+          <GuideSection key={id} icon="key" title="Access information">
+            <Facts items={[
+              { icon: 'body', label: 'Swimming reported', value: swimming, source: 'Explorers / OpenStreetMap', loading: loadingSurr && !swimming },
+              { icon: 'fish', label: 'Fishing permitted', value: fishing, note: 'Always check local regulations and licenses' },
+              { icon: 'lock-closed', label: 'Land access', value: t?.access ? ({ yes: 'Open to the public', permissive: 'Permitted (revocable)', private: 'Private — do not enter', no: 'No access', permit: 'Permit required', customers: 'Customers only' } as Record<string, string>)[t.access] ?? t.access : null, source: 'OpenStreetMap tag' },
+              { icon: 'cash', label: 'Fee', value: t?.fee ? (t.fee === 'yes' ? 'Fee required' : t.fee === 'no' ? 'Free' : t.fee) : null, source: 'OpenStreetMap tag' },
+            ]} />
+            <Text style={[font.small, { marginTop: 8 }]}>CreekFinder does not show property boundaries. If you can't confirm public access, don't go. Respect signs and fences.</Text>
+          </GuideSection>);
+      case 'reviews':
+        return (
+          <GuideSection key={id} icon="star" title="Reviews">
+            {source === 'community' && pubPlace ? (
+              <Card>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><Stars value={rating ?? 0} size={22} /><Text style={font.small}>{rating ? `${rating.toFixed(1)} · ${pubPlace.rating_count} rating${pubPlace.rating_count === 1 ? '' : 's'}` : 'No ratings yet'}</Text></View>
+                {user?.id !== pubPlace.user_id && (<View style={{ marginTop: 12 }}><Text style={font.label}>Your rating</Text>
+                  <Stars value={pubPlace.my_rating ?? 0} size={32} onChange={(n) => needAuth(async () => { try { await rate(pubPlace.id, user!.id, n); setPubOverride(await getPublicPlace(pubPlace.id, user!.id)); } catch (e: any) { Alert.alert('Error', e.message); } })} /></View>)}
+              </Card>
+            ) : <Text style={[font.small, { fontStyle: 'italic', color: colors.faint }]}>{isSaved ? 'Share this place publicly to collect community ratings.' : 'No community reviews yet — save and share this spot to start them.'}</Text>}
+            {commentable && (<>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TextInput value={text} onChangeText={setText} placeholder="Add a comment (be kind & accurate)" placeholderTextColor={colors.faint} maxLength={1000} multiline style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 14, padding: 12, minHeight: 46, color: colors.ink }} />
+                <Button small title="Post" disabled={!text.trim()} onPress={() => needAuth(async () => { try { await addComment(cid, user!.id, text); setText(''); setComments(await getComments(cid)); } catch (e: any) { Alert.alert('Could not post', e.message); } })} />
+              </View>
+              {comments.slice(0, layout === 'compact' ? 2 : 50).map((c) => (
+                <Card key={c.id} style={{ marginTop: 8, padding: 12 }}>
+                  <Text style={{ fontWeight: '700' }}>{c.author} <Text style={font.small}>· {new Date(c.created_at).toLocaleDateString()}</Text></Text><Text style={font.body}>{c.body}</Text>
+                  {c.user_id === user?.id
+                    ? <Text style={{ color: colors.danger, fontWeight: '700', marginTop: 6 }} onPress={async () => { await deleteComment(c.id); setComments(await getComments(cid)); }}>Delete</Text>
+                    : <Text style={{ color: colors.muted, fontWeight: '700', marginTop: 6 }} onPress={() => needAuth(async () => { try { await report(user!.id, { commentId: c.id, reason: 'inappropriate' }); Alert.alert('Reported', 'Thanks — we will review this comment.'); } catch (e: any) { Alert.alert('Error', e.message); } })}>Report</Text>}
+                </Card>))}
+            </>)}
+          </GuideSection>);
+      case 'reports': {
+        const notes = [['What makes it special', ent.desc], ['Water', waterNote], ['Depth', depthNote], ['Surroundings', p?.surroundings ?? pp?.surroundings], ['Private notes', p?.notes]].filter(([, v]) => v);
+        return (
+          <GuideSection key={id} icon="chatbubbles" title="Community reports" sub={isSaved ? 'Your notes' : author ? `Shared by ${author}` : undefined}>
+            {notes.length ? <Card>{notes.map(([l, v], n) => <View key={l as string} style={{ marginTop: n ? 10 : 0 }}><Text style={font.label}>{l}</Text><Text style={font.body}>{v}</Text></View>)}</Card> : <Text style={[font.small, { fontStyle: 'italic', color: colors.faint }]}>No reports or notes for this place yet.</Text>}
+            {source === 'community' && pubPlace && user?.id !== pubPlace.user_id && <View style={{ marginTop: 10 }}><Button small variant="secondary" icon="flag" title="Report incorrect or dangerous info" onPress={doReport} /></View>}
+          </GuideSection>);
+      }
+      case 'weather': return <GuideSection key={id} icon="shield-checkmark" title="Weather & safety"><SafetyPanel lat={lat} lng={lng} /></GuideSection>;
+      case 'nearby':
+        return (
+          <GuideSection key={id} icon="navigate-circle" title="Nearby locations">
+            {nearSaved.length > 0 && <Sub title="Your saved places nearby">{nearSaved.map((x) => (
+              <Pressy key={x.id} scale={0.98} onPress={() => router.push(guideHref({ source: 'saved', id: x.id }))} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: radius.sm + 2, padding: 12, marginBottom: 8 }}>
+                <Ionicons name="bookmark" size={18} color={colors.primary} /><Text style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>{x.name}</Text><Text style={font.small}>{formatDistance(haversine({ lat, lng }, x), imperial)}</Text></Pressy>))}</Sub>}
+            <Sub title="Swimming areas"><FeatureList icon="body" max={cap} items={feat(surr.data?.swimming)} empty="No mapped swimming areas nearby" imperial={imperial} /></Sub>
+            <Sub title="Bridges"><FeatureList icon="git-compare" max={cap} items={feat(surr.data?.bridges)} empty="No mapped bridges nearby" imperial={imperial} /></Sub>
+            <Sub title="Camping (publicly accessible)"><FeatureList icon="bonfire" max={cap} items={feat(surr.data?.camping)} empty="No public campgrounds mapped nearby" imperial={imperial} /></Sub>
+            {layout !== 'compact' && wiki.data && wiki.data.slice(0, layout === 'detailed' ? 5 : 3).map((a) => (
+              <Card key={a.title} style={{ marginBottom: 10, padding: 12 }}><Text style={font.h3}>{a.title}</Text><Text style={[font.small, { marginTop: 2 }]} numberOfLines={3}>{a.extract}</Text>
+                <Text onPress={() => openUrl(a.url)} style={{ color: colors.water, fontWeight: '700', fontSize: 13, marginTop: 6 }}>Wikipedia · {formatDistance(a.distance_m, imperial)} away</Text></Card>))}
+          </GuideSection>);
+      case 'history':
+        return (
+          <GuideSection key={id} icon="time" title="Historical visits" sub="Check-ins at this spot (stored on this device)">
+            {visitsHere.data.length === 0 ? <Text style={[font.small, { fontStyle: 'italic', color: colors.faint }]}>No visits recorded yet.</Text> : visitsHere.data.slice(0, cap).map((v) => (
+              <View key={v.id} style={{ flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.sm + 2, padding: 12, marginBottom: 8 }}>
+                <Ionicons name="walk" size={18} color={colors.primary} /><View style={{ flex: 1 }}><Text style={{ fontWeight: '700' }}>{new Date(v.ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</Text>{v.note ? <Text style={font.small}>{v.note}</Text> : null}</View></View>))}
+            <Button small icon="checkmark-circle" title="Check in here" onPress={checkIn} style={{ marginTop: 6 }} />
+          </GuideSection>);
+    }
+  };
+
+  const checkIn = async () => {
+    if (dist == null || dist > 500) { Alert.alert('Too far to check in', 'You can check in when you are within 500 m (about 1,600 ft) of this spot.'); return; }
+    await addVisit({ place_id: isSaved ? q.id! : null, name: ent.name, kind: ent.kind, lat, lng }); Alert.alert('Checked in', `Visit to ${ent.name} recorded.`);
+  };
+
+
+  // consecutive water-fact sections become ONE "Water information" block, in the user's order
+  const blocks: React.ReactNode[] = [];
+  let water: DetailSectionId[] = [];
+  const flush = () => { if (!water.length) return; const items = water.map((id) => factOf(id)!).filter(Boolean); blocks.push(
+    <GuideSection key={`water-${water.join('-')}`} icon="water" title="Water information" sub="Real measurements only — unknown stays unknown"><Facts items={items} />
+      {layout !== 'compact' && <Text style={[font.small, { marginTop: 8 }]}>Gauge readings come from the nearest USGS station and may be on a different stream. Gauges exist only in the US and many creeks have none.</Text>}</GuideSection>); water = []; };
+  for (const id of order) { if (isWater(id)) water.push(id); else { flush(); const node = section(id); if (node) blocks.push(node); } }
+  flush();
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
-        {/* ---------------- gallery hero ---------------- */}
-        <Gallery photos={photos} height={HERO} gradient={g} kindIcon={kindIcon(ent.kind) as any}>
+        <Gallery photos={heroPhotos} height={layout === 'compact' ? 300 : HERO} gradient={g} kindIcon={kindIcon(ent.kind) as any}>
           <View style={[topBtn, { left: 16 }]}><IconButton icon="chevron-back" label="Back" onPress={() => router.back()} /></View>
           <View style={[topBtn, { right: 16, flexDirection: 'row', gap: 10 }]}>
+            {isSaved && p && <IconButton icon={p.favorite ? 'heart' : 'heart-outline'} label={p.favorite ? 'Remove from favorites' : 'Add to favorites'} active={!!p.favorite} onPress={() => setFavorite(p.id, !p.favorite)} />}
             <IconButton icon="share-outline" label="Share" onPress={() => shareLocation(ent.name, lat, lng)} />
             <IconButton icon={isSaved ? 'bookmark' : 'bookmark-outline'} label={isSaved ? 'Saved' : 'Save to My Places'} active={isSaved} onPress={saveToMine} />
           </View>
@@ -194,7 +367,7 @@ export default function CreekGuide() {
               <Pill tone="dark" icon={kindIcon(ent.kind) as any} label={waterwayLabel(t, ent.kind)} />
               {source === 'community' ? <Pill tone={pubPlace?.verified ? 'ok' : 'amber'} icon={pubPlace?.verified ? 'shield-checkmark' : 'people'} label={pubPlace?.verified ? 'Verified' : 'Community · unverified'} /> : source === 'osm' ? <Pill tone="dark" icon="map" label="OpenStreetMap" /> : null}
             </View>
-            <Animated.Text entering={FadeInDown.duration(450)} numberOfLines={2} style={{ color: '#fff', fontSize: 31, lineHeight: 35, fontFamily: 'Inter_800ExtraBold', letterSpacing: -0.7 }}>{ent.name}</Animated.Text>
+            <Animated.Text numberOfLines={2} style={{ color: '#fff', fontSize: 31 * (layout === 'compact' ? 0.85 : 1), lineHeight: 35, fontFamily: 'Inter_800ExtraBold', letterSpacing: -0.7 }}>{ent.name}</Animated.Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 }}>
               <Ionicons name="location-sharp" size={15} color="rgba(255,255,255,0.9)" />
               <Text style={{ color: 'rgba(255,255,255,0.95)', fontSize: 14.5, flexShrink: 1 }} numberOfLines={1}>{locLabel || (region.loading && online ? 'Finding location…' : formatCoords(lat, lng, 4))}</Text>
@@ -203,160 +376,44 @@ export default function CreekGuide() {
         </Gallery>
 
         <View style={{ marginTop: -18, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: colors.bg, paddingHorizontal: 18, paddingTop: 18 }}>
-          {/* ---------------- key stats ---------------- */}
           <View style={[{ flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: 14 }, shadow.soft]}>
-            <Stat icon="navigate" label="From you" value={dist != null ? formatDistance(dist, imperial) : '—'} />
-            <Div />
-            <Stat icon="star" label="Community" value={rating ? rating.toFixed(1) : 'No ratings'} sub={rating ? `${pubPlace?.rating_count} rating${pubPlace?.rating_count === 1 ? '' : 's'}` : undefined} />
-            <Div />
+            <Stat icon="navigate" label="From you" value={dist != null ? formatDistance(dist, imperial) : '—'} /><Div />
+            <Stat icon="star" label="Community" value={rating ? rating.toFixed(1) : 'No ratings'} sub={rating ? `${pubPlace?.rating_count} rating${pubPlace?.rating_count === 1 ? '' : 's'}` : undefined} /><Div />
             <Stat icon="trending-up" label="Elevation" value={elevText ?? (elev.loading && online ? '…' : 'Unknown')} />
           </View>
-
-          {/* ---------------- actions ---------------- */}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: space.md }}>
             <Button style={{ flex: 1 }} small icon="navigate" title="Find it" onPress={() => router.push({ pathname: '/navigate', params: isSaved ? { id: q.id } : { lat: String(lat), lng: String(lng), name: ent.name } })} />
             <Button style={{ flex: 1 }} small variant="secondary" icon="car" title="Directions" onPress={() => openDirections(ent.name, lat, lng)} />
             <Button style={{ flex: 1 }} small variant="secondary" icon="camera" title="Photo" onPress={addPhotoFlow} />
           </View>
           {!isSaved && <View style={{ marginTop: 10 }}><Button icon="bookmark" title="Save to My Places" onPress={saveToMine} /></View>}
-          {photos.length === 0 && !commons.loading && <Text style={[font.small, { marginTop: 10, textAlign: 'center' }]}>No photos yet for this spot — be the first to add one.</Text>}
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 12, alignItems: 'center' }}>
+            <Text style={[font.label, { marginRight: 4 }]}>View</Text>
+            {(['compact', 'standard', 'detailed'] as const).map((l) => (
+              <Pressy key={l} onPress={() => setLayoutOv(l)} accessibilityLabel={`${l} layout`} style={{ paddingHorizontal: 12, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: layout === l ? colors.primary : colors.surface2 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: layout === l ? colors.onPrimary : colors.muted }}>{l[0].toUpperCase() + l.slice(1)}</Text></Pressy>))}
+            <View style={{ flex: 1 }} /><Pressy onPress={() => router.push('/settings/details')} accessibilityLabel="Customize creek page"><Ionicons name="options" size={20} color={colors.muted} /></Pressy>
+          </View>
+          {photos.length === 0 && !commons.loading && galleryVisible && <Text style={[font.small, { marginTop: 10, textAlign: 'center' }]}>No photos yet for this spot — be the first to add one.</Text>}
 
-          {/* ---------------- about ---------------- */}
-          {(ent.desc || waterNote || depthNote || p?.surroundings || pp?.surroundings || p?.notes) && (
-            <GuideSection icon="document-text" title="About this place" sub={isSaved ? 'Your notes' : author ? `Shared by ${author}` : undefined}>
-              <Card>
-                {ent.desc ? <Text style={font.body}>{ent.desc}</Text> : null}
-                {[['Water', waterNote], ['Depth', depthNote], ['Surroundings', p?.surroundings ?? pp?.surroundings], ['Private notes', p?.notes]].map(([l, v]) => v ? (
-                  <View key={l as string} style={{ marginTop: 10 }}><Text style={font.label}>{l}</Text><Text style={font.body}>{v}</Text></View>) : null)}
-              </Card>
-            </GuideSection>
-          )}
+          {blocks}
+          {source === 'osm' && order.includes('reviews') && <Banner tone="info" icon="information-circle">This spot comes from OpenStreetMap and hasn't been shared by a CreekFinder explorer yet. Save it, add photos and notes, and share it to help others.</Banner>}
 
-          {/* ---------------- LOCATION INFORMATION ---------------- */}
-          <GuideSection icon="location" title="Location information">
-            <FactCard>
-              <Fact icon="pin" label="GPS coordinates" value={formatCoords(lat, lng, 6)} note={formatDMS(lat, lng)} />
-              <Fact icon="compass" label="Latitude · Longitude" value={`${Math.abs(lat).toFixed(6)}° ${lat >= 0 ? 'N' : 'S'}  ·  ${Math.abs(lng).toFixed(6)}° ${lng >= 0 ? 'E' : 'W'}`} />
-              <Fact icon="trending-up" label="Elevation above sea level" value={elevText} source="Terrain data (Open-Meteo)" loading={elev.loading && online} />
-              <Fact icon="map" label="County" value={r?.county} source="OpenStreetMap" loading={region.loading && online} />
-              <Fact icon="flag" label="State / region" value={r?.state} source="OpenStreetMap" loading={region.loading && online} />
-              <Fact icon="business" label="Nearest town" value={r?.town} loading={region.loading && online} />
-              <Fact icon="trail-sign" label="Nearest road" value={road ? `${road.name} · ${formatDistance(road.distance_m, imperial)}` : null} source="OpenStreetMap" loading={surr.loading && online} />
-              <Fact icon="car" label="Nearest parking area" value={park ? `${park.name} · ${formatDistance(park.distance_m, imperial)} away` : null} source="OpenStreetMap (public lots only)" note={park ? 'Straight-line distance' : 'No mapped public parking within 4 km'} loading={surr.loading && online} />
-              <Fact icon="navigate" label="Distance from you" value={dist != null ? formatDistance(dist, imperial) : null} note="Straight-line" />
-            </FactCard>
-            <View style={{ height: 230, borderRadius: radius.md, overflow: 'hidden', marginTop: space.md, backgroundColor: colors.surface2 }}>
-              <CreekMap styleKey="satellite" cameraRef={cam} pins={mapPins} showUser={false} attributionBottom={4} initial={{ center: [lng, lat], zoom: 15 }} />
-              <View style={{ position: 'absolute', right: 10, bottom: 26 }}><IconButton size={40} icon="expand" label="Open on full map" onPress={() => router.push({ pathname: '/(tabs)/map', params: { lat: String(lat), lng: String(lng), zoom: '16' } })} /></View>
-            </View>
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-              <Button small variant="secondary" icon="copy" title="Copy coordinates" style={{ flex: 1 }} onPress={async () => { await copyCoords(lat, lng); Alert.alert('Copied', 'Coordinates copied.'); }} />
-              <Button small variant="secondary" icon="share" title="Share location" style={{ flex: 1 }} onPress={() => shareLocation(ent.name, lat, lng)} />
-            </View>
-          </GuideSection>
-
-          {/* ---------------- WATER INFORMATION ---------------- */}
-          <GuideSection icon="water" title="Water information" sub="Real measurements only — unknown stays unknown">
-            <FactCard>
-              <Fact icon="git-branch" label="Waterway type" value={waterwayLabel(t, ent.kind)} source={t ? 'OpenStreetMap' : 'Saved type'} />
-              <Fact icon="resize" label="Estimated width" value={width != null ? (imperial ? `${Math.round(width * 3.28)} ft` : `${width} m`) : null} source="OpenStreetMap tag" />
-              <Fact icon="arrow-down" label="Depth" value={depthTag != null ? (imperial ? `${Math.round(depthTag * 3.28)} ft` : `${depthTag} m`) : depthNote ? `“${depthNote}”` : null} source={depthTag != null ? 'OpenStreetMap tag' : 'Explorer report'} />
-              <Fact icon="eye" label="Water clarity" value={gTurb ? `${turbidityLabel(gTurb.v)} (${gTurb.v} FNU)` : waterNote ? `“${waterNote}”` : null} source={gTurb ? gSrc(gTurb) : 'Explorer report'} loading={gauges.loading && online} />
-              <Fact icon="speedometer" label="Flow conditions" value={gFlow ? `${Math.round(gFlow.v).toLocaleString()} ft³/s` : null} source={gSrc(gFlow)} loading={gauges.loading && online} />
-              <Fact icon="thermometer" label="Water temperature" value={gTemp ? (imperial ? `${(gTemp.v * 9 / 5 + 32).toFixed(1)}°F` : `${gTemp.v.toFixed(1)}°C`) : null} source={gSrc(gTemp)} loading={gauges.loading && online} />
-              <Fact icon="analytics" label="Water level (gauge height)" value={gLevel ? `${gLevel.v.toFixed(2)} ft` : null} source={gSrc(gLevel)} loading={gauges.loading && online} />
-              <Fact icon="body" label="Swimming reported" value={swimming} source="Explorers / OpenStreetMap" loading={surr.loading && online && !swimming} />
-              <Fact icon="fish" label="Fishing permitted" value={fishing} note="Always check local regulations and licenses" />
-            </FactCard>
-            <Text style={[font.small, { marginTop: 8 }]}>Gauge readings come from the nearest USGS station and may be on a different stream. Gauges exist only in the US and many creeks have none.</Text>
-          </GuideSection>
-
-          {/* ---------------- SURROUNDING AREA ---------------- */}
-          <GuideSection icon="trail-sign" title="Surrounding area" sub="Within about 4 km (OpenStreetMap)">
-            <Sub title="Waterfalls nearby"><FeatureList icon="arrow-down-circle" items={surr.data ? surr.data.waterfalls.filter((f) => f.distance_m > 25) : surr.loading && online ? null : []} empty="No mapped waterfalls nearby" imperial={imperial} /></Sub>
-            <Sub title="Nearby trails"><FeatureList icon="walk" items={surr.data ? surr.data.trails : surr.loading && online ? null : []} empty="No named trails mapped nearby" imperial={imperial} /></Sub>
-            <Sub title="Nearby bridges"><FeatureList icon="git-compare" items={surr.data ? surr.data.bridges : surr.loading && online ? null : []} empty="No mapped bridges nearby" imperial={imperial} /></Sub>
-            <Sub title="Nearby swimming areas"><FeatureList icon="body" items={surr.data ? surr.data.swimming : surr.loading && online ? null : []} empty="No mapped swimming areas nearby" imperial={imperial} /></Sub>
-            <Sub title="Rock formations"><FeatureList icon="triangle" items={surr.data ? surr.data.rocks : surr.loading && online ? null : []} empty="No mapped rock formations, cliffs or boulders nearby" imperial={imperial} /></Sub>
-            <Sub title="Camping (publicly accessible)"><FeatureList icon="bonfire" items={surr.data ? surr.data.camping : surr.loading && online ? null : []} empty="No public campgrounds mapped nearby" imperial={imperial} /></Sub>
-            {!online && <Banner tone="info" icon="cloud-offline">You're offline. This section shows what was saved last time you viewed this place online.</Banner>}
-          </GuideSection>
-
-          <GuideSection icon="leaf" title="Trees & vegetation" sub="Plants recorded within 3 km (iNaturalist, research grade)">
-            <Sub title="Trees"><SpeciesRow items={plants.data ? trees.slice(0, 10) : plants.loading && online ? null : []} empty="No tree observations recorded nearby" /></Sub>
-            <Sub title="Other plants"><SpeciesRow items={plants.data ? otherPlants.slice(0, 10) : plants.loading && online ? null : []} empty="No plant observations recorded nearby" /></Sub>
-          </GuideSection>
-
-          <GuideSection icon="paw" title="Wildlife observations" sub="Animals recorded within 3 km (iNaturalist, research grade)">
-            <SpeciesRow items={wild.data ? wild.data : wild.loading && online ? null : []} empty="No wildlife observations recorded nearby" />
-          </GuideSection>
-
-          {wiki.data && wiki.data.length > 0 && (
-            <GuideSection icon="image" title="Natural scenery & nearby sights" sub="Notable places nearby (Wikipedia)">
-              {wiki.data.slice(0, 4).map((a) => (
-                <Card key={a.title} style={{ marginBottom: 10, padding: 12 }}>
-                  <Text style={font.h3}>{a.title}</Text><Text style={[font.small, { marginTop: 2 }]} numberOfLines={3}>{a.extract}</Text>
-                  <Text onPress={() => openUrl(a.url)} style={{ color: colors.water, fontWeight: '700', fontSize: 13, marginTop: 6 }}>Read on Wikipedia · {formatDistance(a.distance_m, imperial)} away</Text>
-                </Card>
-              ))}
-            </GuideSection>
-          )}
-
-          {/* ---------------- SAFETY ---------------- */}
-          <GuideSection icon="shield-checkmark" title="Conditions & safety">
-            <SafetyPanel lat={lat} lng={lng} />
-          </GuideSection>
-
-          {/* ---------------- COMMUNITY ---------------- */}
-          {source === 'community' && pubPlace && (
-            <GuideSection icon="people" title="Explorer community">
-              <Card>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><Stars value={rating ?? 0} size={22} /><Text style={font.small}>{rating ? `${rating.toFixed(1)} · ${pubPlace.rating_count} rating${pubPlace.rating_count === 1 ? '' : 's'}` : 'No ratings yet'}</Text></View>
-                {user?.id !== pubPlace.user_id && (<View style={{ marginTop: 12 }}><Text style={font.label}>Your rating</Text>
-                  <Stars value={pubPlace.my_rating ?? 0} size={32} onChange={(n) => needAuth(async () => { try { await rate(pubPlace.id, user!.id, n); setPubOverride(await getPublicPlace(pubPlace.id, user!.id)); } catch (e: any) { Alert.alert('Error', e.message); } })} /></View>)}
-              </Card>
-            </GuideSection>
-          )}
-          {commentable && (
-            <GuideSection icon="chatbubbles" title="Comments">
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TextInput value={text} onChangeText={setText} placeholder="Add a comment (be kind & accurate)" placeholderTextColor={colors.faint} maxLength={1000} multiline style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 14, padding: 12, minHeight: 46, color: colors.ink, fontFamily: 'Inter_400Regular' }} />
-                <Button small title="Post" disabled={!text.trim()} onPress={() => needAuth(async () => { try { await addComment(cid, user!.id, text); setText(''); setComments(await getComments(cid)); } catch (e: any) { Alert.alert('Could not post', e.message); } })} />
-              </View>
-              {comments.length === 0 && <Text style={[font.small, { marginTop: 8 }]}>No comments yet.</Text>}
-              {comments.map((c) => (
-                <Card key={c.id} style={{ marginTop: 8, padding: 12 }}>
-                  <Text style={{ fontWeight: '700' }}>{c.author} <Text style={font.small}>· {new Date(c.created_at).toLocaleDateString()}</Text></Text>
-                  <Text style={font.body}>{c.body}</Text>
-                  {c.user_id === user?.id
-                    ? <Text style={{ color: colors.danger, fontWeight: '700', marginTop: 6 }} onPress={async () => { await deleteComment(c.id); setComments(await getComments(cid)); }}>Delete</Text>
-                    : <Text style={{ color: colors.muted, fontWeight: '700', marginTop: 6 }} onPress={() => needAuth(async () => { try { await report(user!.id, { commentId: c.id, reason: 'inappropriate' }); Alert.alert('Reported', 'Thanks — we will review this comment.'); } catch (e: any) { Alert.alert('Error', e.message); } })}>Report</Text>}
-                </Card>
-              ))}
-            </GuideSection>
-          )}
-          {source === 'osm' && (
-            <Banner tone="info" icon="information-circle">This spot comes from OpenStreetMap and hasn't been shared by a CreekFinder explorer yet. Save it, add photos and notes, and share it to help others.</Banner>
-          )}
-
-          {/* ---------------- MANAGE (saved) ---------------- */}
           {isSaved && p && (
             <GuideSection icon="settings" title="Manage this place">
               <Group>
                 <Row icon="create" title="Edit details" onPress={() => router.push({ pathname: '/save', params: { id: p.id } })} />
                 <Row icon="folder" title="Folder" subtitle={folder?.name ?? 'None'} onPress={() => Alert.alert('Move to folder', undefined, [{ text: 'No folder', onPress: () => movePlaceToFolder(p.id, null) }, ...folders.data.map((f) => ({ text: f.name, onPress: () => movePlaceToFolder(p.id, f.id) })), { text: 'Cancel', style: 'cancel' as const }])} />
-                <Row icon="globe" title="Share on community map" subtitle={p.visibility === 'public' ? 'Public — visible to everyone' : 'Private — only you can see this'} right={<Switch value={p.visibility === 'public'} onValueChange={toggleShare} trackColor={{ true: colors.water }} />} />
+                <Row icon="globe" title="Share on community map" subtitle={privateColl ? 'In a private collection — can\'t be shared' : p.visibility === 'public' ? 'Public — visible to everyone' : 'Private — only you can see this'} right={<Switch disabled={privateColl} value={p.visibility === 'public'} onValueChange={toggleShare} trackColor={{ true: colors.water }} />} />
                 <Row icon="trash" danger title="Delete place" onPress={() => Alert.alert('Delete this place?', `"${p.name}" and its photos will be removed from all your devices.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { await deletePlace(p.id); router.back(); } }])} />
               </Group>
             </GuideSection>
           )}
           {source === 'community' && pubPlace && user?.id !== pubPlace.user_id && (
             <View style={{ marginTop: space.xl }}><Group>
-              <Row icon="flag" title="Report incorrect or dangerous info" onPress={doReport} />
               <Row icon="ban" danger title={`Block ${pubPlace.author}`} onPress={() => needAuth(() => Alert.alert(`Block ${pubPlace.author}?`, "You won't see their places or comments anymore.", [{ text: 'Cancel', style: 'cancel' }, { text: 'Block', style: 'destructive', onPress: async () => { try { await blockUser(user!.id, pubPlace.user_id); router.back(); } catch (e: any) { Alert.alert('Error', e.message); } } }]))} />
             </Group></View>
           )}
-
           <Text style={[font.small, { marginTop: space.xl, lineHeight: 17 }]}>{attributionNote} Everything here can be incomplete or out of date. Verify access and conditions yourself, respect private property, and never enter fast or rising water.</Text>
         </View>
       </ScrollView>
@@ -373,4 +430,5 @@ const Stat = ({ icon, label, value, sub }: { icon: any; label: string; value: st
 );
 const Div = () => <View style={{ width: 1, backgroundColor: colors.line, marginVertical: 4 }} />;
 const Sub = ({ title, children }: { title: string; children: React.ReactNode }) => (<View style={{ marginBottom: space.md }}><Text style={[font.label, { marginBottom: 8 }]}>{title}</Text>{children}</View>);
-void guideHref; void Pill; void SourceBadge; void ({} as PlaceKind);
+void guideHref; void SourceBadge; void DETAIL_META; void ({} as PlaceKind);
+export default themed(CreekGuide);

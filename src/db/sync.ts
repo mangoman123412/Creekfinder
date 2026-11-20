@@ -26,7 +26,7 @@ async function doSync(uid: string): Promise<SyncResult> {
   const folders = await db.getAllAsync<any>('SELECT * FROM folders WHERE dirty=1');
   for (const f of folders) {
     const { error } = await supabase.from('folders').upsert({
-      user_id: uid, id: f.id, name: f.name, icon: f.icon, sort: f.sort, system_key: f.system_key, deleted_at: f.deleted ? new Date().toISOString() : null,
+      user_id: uid, id: f.id, name: f.name, icon: f.icon, sort: f.sort, system_key: f.system_key, color: f.color, parent_id: f.parent_id, private: !!f.private, deleted_at: f.deleted ? new Date().toISOString() : null,
     });
     if (error) res.errors.push(`folder: ${error.message}`);
     else { await db.runAsync('UPDATE folders SET dirty=0 WHERE id=? AND updated_at=?', f.id, f.updated_at); res.pushed++; }
@@ -38,7 +38,7 @@ async function doSync(uid: string): Promise<SyncResult> {
     const { error } = await supabase.from('places').upsert({
       id: p.id, user_id: uid, name: p.name, kind: p.kind, lat: p.lat, lng: p.lng, accuracy_m: p.accuracy_m, altitude_m: p.altitude_m,
       description: p.description, water_notes: p.water_notes, depth_notes: p.depth_notes, surroundings: p.surroundings, notes: p.notes,
-      folder_id: p.folder_id, visibility: p.visibility, source_place_id: p.source_place_id, created_at: p.created_at,
+      folder_id: p.folder_id, visibility: p.visibility, source_place_id: p.source_place_id, favorite: !!p.favorite, tags: (() => { try { return p.tags ? JSON.parse(p.tags) : []; } catch { return []; } })(), rating: p.rating, created_at: p.created_at,
       deleted_at: p.deleted ? new Date().toISOString() : null,
     });
     if (error) {
@@ -101,22 +101,22 @@ async function doSync(uid: string): Promise<SyncResult> {
       const local = await db.getFirstAsync<{ dirty: number }>('SELECT dirty FROM folders WHERE id=?', r.id);
       if (local?.dirty) return false;
       await db.runAsync(
-        `INSERT INTO folders(id,user_id,name,icon,sort,system_key,updated_at,deleted,dirty) VALUES(?,?,?,?,?,?,?,?,0)
-         ON CONFLICT(id) DO UPDATE SET name=excluded.name,icon=excluded.icon,sort=excluded.sort,updated_at=excluded.updated_at,deleted=excluded.deleted,user_id=excluded.user_id`,
-        r.id, uid, r.name, r.icon, r.sort, r.system_key, r.updated_at, r.deleted_at ? 1 : 0);
+        `INSERT INTO folders(id,user_id,name,icon,sort,system_key,color,parent_id,private,updated_at,deleted,dirty) VALUES(?,?,?,?,?,?,?,?,?,?,?,0)
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name,icon=excluded.icon,sort=excluded.sort,color=excluded.color,parent_id=excluded.parent_id,private=excluded.private,updated_at=excluded.updated_at,deleted=excluded.deleted,user_id=excluded.user_id`,
+        r.id, uid, r.name, r.icon, r.sort, r.system_key, r.color ?? null, r.parent_id ?? null, r.private ? 1 : 0, r.updated_at, r.deleted_at ? 1 : 0);
       return true;
     });
     res.pulled += await pull(uid, 'places', async (r) => {
       const local = await db.getFirstAsync<{ dirty: number }>('SELECT dirty FROM places WHERE id=?', r.id);
       if (local?.dirty) return false;
       await db.runAsync(
-        `INSERT INTO places(id,user_id,name,kind,lat,lng,accuracy_m,altitude_m,description,water_notes,depth_notes,surroundings,notes,folder_id,visibility,source_place_id,created_at,updated_at,deleted,dirty)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
+        `INSERT INTO places(id,user_id,name,kind,lat,lng,accuracy_m,altitude_m,description,water_notes,depth_notes,surroundings,notes,folder_id,visibility,source_place_id,favorite,tags,rating,created_at,updated_at,deleted,dirty)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
          ON CONFLICT(id) DO UPDATE SET name=excluded.name,kind=excluded.kind,lat=excluded.lat,lng=excluded.lng,accuracy_m=excluded.accuracy_m,altitude_m=excluded.altitude_m,
            description=excluded.description,water_notes=excluded.water_notes,depth_notes=excluded.depth_notes,surroundings=excluded.surroundings,notes=excluded.notes,
-           folder_id=excluded.folder_id,visibility=excluded.visibility,updated_at=excluded.updated_at,deleted=excluded.deleted`,
+           folder_id=excluded.folder_id,visibility=excluded.visibility,favorite=excluded.favorite,tags=excluded.tags,rating=excluded.rating,updated_at=excluded.updated_at,deleted=excluded.deleted`,
         r.id, uid, r.name, r.kind, r.lat, r.lng, r.accuracy_m, r.altitude_m, r.description, r.water_notes, r.depth_notes, r.surroundings, r.notes,
-        r.folder_id, r.visibility, r.source_place_id, r.created_at, r.updated_at, r.deleted_at ? 1 : 0);
+        r.folder_id, r.visibility, r.source_place_id, r.favorite ? 1 : 0, Array.isArray(r.tags) && r.tags.length ? JSON.stringify(r.tags) : null, r.rating ?? null, r.created_at, r.updated_at, r.deleted_at ? 1 : 0);
       return true;
     });
     res.pulled += await pull(uid, 'photos', async (r) => {

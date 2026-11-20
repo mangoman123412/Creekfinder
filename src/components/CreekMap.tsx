@@ -1,105 +1,86 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Camera, GeoJSONSource, Layer, Map, UserLocation, type CameraRef, type MapRef } from '@maplibre/maplibre-react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Camera, GeoJSONSource, Layer, Map, Marker, UserLocation, type CameraRef, type MapRef } from '@maplibre/maplibre-react-native';
+import { Ionicons } from '../custom/Icon';
 import type { MapStyleKey } from '../types';
-import { styleUrl } from '../lib/mapStyles';
-import { isDark } from '../theme';
 import { colors } from '../theme';
+import { useActiveMapPreset, useMapStyle, groupColors } from '../custom/useMapPrefs';
+import type { MapPreset, MarkerShape } from '../custom/schema';
 
-export type PinGroup = 'saved' | 'community' | 'osm' | 'target';
+export type PinGroup = 'saved' | 'community' | 'osm' | 'target' | 'visited' | 'parking';
 export interface MapPin { id: string; lat: number; lng: number; name: string; group: PinGroup; kind?: string }
 
 export interface CreekMapProps {
-  styleKey: MapStyleKey;
-  pins?: MapPin[];
-  selectedId?: string | null;
-  track?: { lat: number; lng: number }[];
-  multiTrack?: { lat: number; lng: number }[][];   // many separate trails (history overview)
-  guide?: { lat: number; lng: number }[];         // dashed guidance line (e.g. you -> destination, or way back)
-  showUser?: boolean;
-  initial?: { center: [number, number]; zoom: number };
-  onPressPin?: (pin: MapPin) => void;
-  onPressMap?: (lat: number, lng: number) => void;
-  onLongPress?: (lat: number, lng: number) => void;
+  styleKey?: MapStyleKey;                       // optional override of the preset's map type
+  preset?: MapPreset;                           // optional: render with a specific (e.g. draft) preset
+  pins?: MapPin[]; selectedId?: string | null;
+  track?: { lat: number; lng: number }[]; multiTrack?: { lat: number; lng: number }[][]; guide?: { lat: number; lng: number }[];
+  showUser?: boolean; initial?: { center: [number, number]; zoom: number };
+  onPressPin?: (pin: MapPin) => void; onPressMap?: (lat: number, lng: number) => void; onLongPress?: (lat: number, lng: number) => void;
   onRegionChange?: (e: { center: [number, number]; zoom: number; bounds: [number, number, number, number]; userInteraction: boolean }) => void;
-  style?: StyleProp<ViewStyle>;
-  attributionBottom?: number;
-  maxZoom?: number;
-  children?: React.ReactNode;
+  style?: StyleProp<ViewStyle>; attributionBottom?: number; maxZoom?: number; children?: React.ReactNode;
 }
 
-const GROUP_COLOR: Record<PinGroup, string> = { saved: colors.forest, community: colors.water, osm: '#7A8F86', target: colors.danger };
+/** Effective preset: the user's active one, with an optional map-type override from legacy callers. */
+export function useEffectivePreset(p: { preset?: MapPreset; styleKey?: MapStyleKey }): MapPreset {
+  const active = useActiveMapPreset();
+  return useMemo(() => { const base = p.preset ?? active; return p.styleKey && !p.preset ? { ...base, style: p.styleKey === 'terrain' ? 'terrain' : p.styleKey === 'satellite' ? 'satellite' : 'standard' } : base; }, [p.preset, p.styleKey, active]);
+}
+export const brightnessOverlay = (b: number) => (b === 0 ? null : b > 0 ? `rgba(255,255,255,${Math.min(0.55, b * 0.9)})` : `rgba(0,0,0,${Math.min(0.6, -b * 1.1)})`);
+
+const SHAPE_NATIVE: MarkerShape[] = ['square', 'diamond', 'triangle', 'star'];
+function ShapeView({ shape, color, size }: { shape: MarkerShape; color: string; size: number }) {
+  const s = 22 * size;
+  if (shape === 'star') return <Ionicons name="star" size={s * 1.2} color={color} style={{ textShadowColor: '#fff', textShadowRadius: 3 } as any} />;
+  if (shape === 'triangle') return <View style={{ width: 0, height: 0, borderLeftWidth: s * 0.55, borderRightWidth: s * 0.55, borderBottomWidth: s, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: color }} />;
+  return <View style={{ width: s * 0.8, height: s * 0.8, backgroundColor: color, borderWidth: 2.5, borderColor: '#fff', borderRadius: 3, transform: [{ rotate: shape === 'diamond' ? '45deg' : '0deg' }] }} />;
+}
 
 export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<CameraRef>; mapRef?: React.Ref<MapRef> }) {
-  {
-    const fc = useMemo(() => ({
-      type: 'FeatureCollection' as const,
-      features: (p.pins ?? []).map((pin) => ({
-        type: 'Feature' as const, id: pin.id,
-        properties: { id: pin.id, name: pin.name, group: pin.group, kind: pin.kind ?? '', color: GROUP_COLOR[pin.group] },
-        geometry: { type: 'Point' as const, coordinates: [pin.lng, pin.lat] },
-      })),
-    }), [p.pins]);
-    const trackFc = useMemo(() => ({
-      type: 'FeatureCollection' as const,
-      features: p.multiTrack?.length
-        ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'MultiLineString' as const, coordinates: p.multiTrack.filter((l) => l.length > 1).map((l) => l.map((t) => [t.lng, t.lat])) } }]
-        : p.track && p.track.length > 1 ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: p.track.map((t) => [t.lng, t.lat]) } }] : [],
-    }), [p.track, p.multiTrack]);
-    const guideFc = useMemo(() => ({
-      type: 'FeatureCollection' as const,
-      features: p.guide && p.guide.length > 1 ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: p.guide.map((t) => [t.lng, t.lat]) } }] : [],
-    }), [p.guide]);
+  const preset = useEffectivePreset(p);
+  const { style, brightness } = useMapStyle(preset);
+  const gc = groupColors(preset);
+  const size = preset.markers.size, shape = preset.markers.shape;
+  const useMarkers = SHAPE_NATIVE.includes(shape) && (p.pins?.length ?? 0) <= 150;
 
-    return (
-      <Map
-        style={[StyleSheet.absoluteFill, p.style]}
-        mapStyle={styleUrl(p.styleKey, isDark())}
-        logo={false}
-        attributionPosition={{ bottom: p.attributionBottom ?? 8, left: 8 }}
-        compass
-        compassPosition={{ top: 120, right: 12 }}
-        touchPitch={false}
+  const fc = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: (useMarkers ? [] : p.pins ?? []).map((pin) => ({ type: 'Feature' as const, id: pin.id, properties: { id: pin.id, name: pin.name, group: pin.group, color: gc[pin.group] }, geometry: { type: 'Point' as const, coordinates: [pin.lng, pin.lat] } })),
+  }), [p.pins, gc.saved, gc.community, gc.osm, gc.visited, gc.parking, useMarkers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const line = (pts?: { lat: number; lng: number }[]) => ({ type: 'FeatureCollection' as const, features: pts && pts.length > 1 ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: pts.map((t) => [t.lng, t.lat]) } }] : [] });
+  const trackFc = useMemo(() => p.multiTrack?.length
+    ? { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'MultiLineString' as const, coordinates: p.multiTrack.filter((l) => l.length > 1).map((l) => l.map((t) => [t.lng, t.lat])) } }] }
+    : line(p.track), [p.track, p.multiTrack]);
+  const guideFc = useMemo(() => line(p.guide), [p.guide]);
+  const overlay = brightnessOverlay(brightness);
+  const ring = shape === 'ring';
+
+  return (
+    <View style={[StyleSheet.absoluteFill, p.style]}>
+      <Map style={StyleSheet.absoluteFill} mapStyle={style as any} logo={false} attributionPosition={{ bottom: p.attributionBottom ?? 8, left: 8 }} compass compassPosition={{ top: 120, right: 12 }} touchPitch={false}
         onLongPress={(e) => { const [lng, lat] = e.nativeEvent.lngLat; p.onLongPress?.(lat, lng); }}
         onPress={(e) => { const [lng, lat] = e.nativeEvent.lngLat; p.onPressMap?.(lat, lng); }}
-        onRegionDidChange={(e) => {
-          const v = e.nativeEvent;
-          p.onRegionChange?.({ center: v.center as [number, number], zoom: v.zoom, bounds: v.bounds as [number, number, number, number], userInteraction: v.userInteraction });
-        }}
-        ref={p.mapRef}
-      >
-        <Camera
-          ref={p.cameraRef}
-          initialViewState={{ center: p.initial?.center ?? [-98.5, 39.8], zoom: p.initial?.zoom ?? 3 }}
-          maxZoom={p.maxZoom ?? 20}
-        />
-
-        <GeoJSONSource id="guide" data={guideFc}>
-          <Layer type="line" id="guide-line" paint={{ 'line-color': colors.water, 'line-width': 3, 'line-dasharray': [2, 2] }} layout={{ 'line-cap': 'round' }} />
-        </GeoJSONSource>
+        onRegionDidChange={(e) => { const v = e.nativeEvent; p.onRegionChange?.({ center: v.center as [number, number], zoom: v.zoom, bounds: v.bounds as [number, number, number, number], userInteraction: v.userInteraction }); }} ref={p.mapRef}>
+        <Camera ref={p.cameraRef} initialViewState={{ center: p.initial?.center ?? [-98.5, 39.8], zoom: p.initial?.zoom ?? preset.defaultZoom ?? 3 }} maxZoom={p.maxZoom ?? 20} />
+        <GeoJSONSource id="guide" data={guideFc}><Layer type="line" id="guide-line" paint={{ 'line-color': colors.water, 'line-width': 3, 'line-dasharray': [2, 2] }} layout={{ 'line-cap': 'round' }} /></GeoJSONSource>
         <GeoJSONSource id="track" data={trackFc}>
           <Layer type="line" id="track-casing" paint={{ 'line-color': '#FFFFFF', 'line-width': 7, 'line-opacity': 0.9 }} layout={{ 'line-cap': 'round', 'line-join': 'round' }} />
           <Layer type="line" id="track-line" paint={{ 'line-color': '#E4572E', 'line-width': 4 }} layout={{ 'line-cap': 'round', 'line-join': 'round' }} />
         </GeoJSONSource>
-
-        <GeoJSONSource
-          id="pins" data={fc} cluster clusterRadius={42} clusterMaxZoom={13} hitbox={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          onPress={(e) => {
-            const f = e.nativeEvent.features?.[0];
-            if (!f || f.properties?.cluster) return;
-            const pin = (p.pins ?? []).find((x) => x.id === f.properties?.id);
-            if (pin) p.onPressPin?.(pin);
-          }}
-        >
-          <Layer type="circle" id="pins-cluster" filter={['has', 'point_count']} paint={{ 'circle-color': colors.forestDark, 'circle-radius': 17, 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' }} />
+        <GeoJSONSource id="pins" data={fc} cluster={!useMarkers} clusterRadius={42} clusterMaxZoom={13} hitbox={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          onPress={(e) => { const f = e.nativeEvent.features?.[0]; if (!f || f.properties?.cluster) return; const pin = (p.pins ?? []).find((x) => x.id === f.properties?.id); if (pin) p.onPressPin?.(pin); }}>
+          <Layer type="circle" id="pins-cluster" filter={['has', 'point_count']} paint={{ 'circle-color': colors.primaryDeep, 'circle-radius': 17, 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' }} />
           <Layer type="symbol" id="pins-count" filter={['has', 'point_count']} layout={{ 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Bold'], 'text-size': 13 }} paint={{ 'text-color': '#ffffff' }} />
-          <Layer type="circle" id="pins-sel" filter={['==', ['get', 'id'], p.selectedId ?? '']} paint={{ 'circle-color': '#FFD54A', 'circle-radius': 17, 'circle-opacity': 0.9 }} />
-          <Layer type="circle" id="pins-dot" filter={['!', ['has', 'point_count']]} paint={{ 'circle-color': ['get', 'color'], 'circle-radius': 9, 'circle-stroke-width': 3, 'circle-stroke-color': '#FFFFFF' }} />
+          <Layer type="circle" id="pins-sel" filter={['==', ['get', 'id'], p.selectedId ?? '']} paint={{ 'circle-color': '#FFD54A', 'circle-radius': 17 * size, 'circle-opacity': 0.9 }} />
+          <Layer type="circle" id="pins-dot" filter={['!', ['has', 'point_count']]} paint={{ 'circle-color': ring ? 'rgba(0,0,0,0)' : ['get', 'color'], 'circle-radius': (ring ? 8 : 9) * size, 'circle-stroke-width': ring ? 4 * size : 3, 'circle-stroke-color': ring ? ['get', 'color'] : '#FFFFFF' }} />
         </GeoJSONSource>
-
+        {useMarkers && (p.pins ?? []).map((pin) => (
+          <Marker key={pin.id} id={pin.id} lngLat={[pin.lng, pin.lat]} onPress={() => p.onPressPin?.(pin)}><ShapeView shape={shape} color={gc[pin.group]} size={size} /></Marker>
+        ))}
         {p.showUser !== false && <UserLocation accuracy heading />}
         {p.children}
       </Map>
-    );
-  }
+      {overlay && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />}
+    </View>
+  );
 }

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { FlatList, Pressable, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../src/custom/Icon';
 import { Chip, Empty, Button } from '../src/components/ui';
 import { CreekMap } from '../src/components/CreekMap';
 import { listAdventures, getDb } from '../src/db/local';
@@ -11,7 +12,7 @@ import { useApp } from '../src/state/app';
 import { formatDistance, formatDuration } from '../src/lib/geo';
 import { colors, font, space } from '../src/theme';
 
-export default function Adventures() {
+function Adventures() {
   const router = useRouter();
   const { imperial } = useApp();
   const [view, setView] = useState<'list' | 'map'>('list');
@@ -62,3 +63,4 @@ export default function Adventures() {
 function MultiTrackMap({ lines, center }: { lines: { lat: number; lng: number }[][]; center?: [number, number] }) {
   return <CreekMap styleKey="standard" showUser={false} multiTrack={lines} initial={center ? { center, zoom: 12 } : undefined} pins={[]} />;
 }
+export default themed(Adventures);

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { themed } from '../src/custom/themed';
 import { ActivityIndicator, Linking, Platform, ScrollView, View } from 'react-native';
 import { Text } from '../src/components/ui';
 import { Alert } from '../src/lib/alert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../src/custom/Icon';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { Banner, Button, Card } from '../src/components/ui';
 import { useApp } from '../src/state/app';
@@ -29,7 +30,7 @@ const FEATURES: [string, string, string][] = [
   ['images', 'More photo storage', 'Free: 5 photos per place · Premium: 30'],
 ];
 
-export default function Premium() {
+function Premium() {
   const { reason } = useLocalSearchParams<{ reason?: string }>();
   const router = useRouter();
   const { premium, refreshPremium, user, devPremium, setDevPremium } = useApp();
@@ -93,3 +94,4 @@ export default function Premium() {
     </ScrollView>
   );
 }
+export default themed(Premium);
