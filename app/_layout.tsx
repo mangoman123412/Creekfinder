@@ -1,5 +1,6 @@
 import '../src/lib/tracking'; // registers the background GPS task at startup
 import React, { useEffect } from 'react';
+import { checkForUpdate } from '../src/lib/update';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -18,6 +19,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function Gate({ fontsReady }: { fontsReady: boolean }) {
   const { ready } = useApp();
   const { dark } = useTheme();
+  useEffect(() => { checkForUpdate(); }, []);
   useEffect(() => {
     void getDb().then(() => resumeIfNeeded()).finally(() => { if (ready && fontsReady) void SplashScreen.hideAsync(); });
   }, [ready, fontsReady]);

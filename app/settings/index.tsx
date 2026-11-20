@@ -9,6 +9,7 @@ import { activeProfile, switchProfile, useLibrary, useSettings, allMapPresets, g
 import { THEME_PRESETS } from '../../src/custom/schema';
 import { useApp } from '../../src/state/app';
 import { colors, font, radius, shadow } from '../../src/theme';
+import { buildId, canUpdate, checkForUpdate } from '../../src/lib/update';
 import { themed } from '../../src/custom/themed';
 
 function Hub() {
@@ -66,6 +67,11 @@ function Hub() {
         <NavRow icon="cloud-upload" title="Cloud sync & backup" subtitle={user ? 'Signed in — settings sync to your account' : 'Sign in to sync across devices'} onPress={go('/settings/cloud')} />
         <NavRow icon="lock-closed" title="Privacy & security" subtitle={`New places are ${s.privacy.defaultVisibility}`} onPress={go('/settings/privacy')} />
       </Group2>
+      {canUpdate && (
+        <Group2 title="App version">
+          <NavRow icon="refresh" title="Update app" subtitle={`Build ${buildId()} · tap to fetch the newest version`} onPress={() => { checkForUpdate(true); }} />
+        </Group2>
+      )}
     </ScrollView>
   );
 }

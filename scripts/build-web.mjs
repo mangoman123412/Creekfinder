@@ -14,5 +14,8 @@ for (const f of ['index.html', 'sw.js', 'manifest.webmanifest']) {
   const p = join('dist', f);
   writeFileSync(p, readFileSync(p, 'utf8').replaceAll('%BASE%', base));
 }
+const build = String(Date.now());
+writeFileSync('dist/build.json', JSON.stringify({ id: build }));
+writeFileSync('dist/index.html', readFileSync('dist/index.html', 'utf8').replace('</head>', `<script>window.__BUILD__="${build}"</script></head>`));
 copyFileSync('dist/index.html', 'dist/404.html'); // single-page-app fallback for GitHub Pages
 console.log(`Built dist/ with base "${base || '/'}"`);
