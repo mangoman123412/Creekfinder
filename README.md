@@ -33,3 +33,4 @@ npx expo start --dev-client      # needs a dev build (maps are native code)
 * **Not implemented:** property-boundary warnings (no reliable free national dataset; the app says so rather than guessing — Regrid or similar is a paid integration); sync conflict resolution is last-write-wins; water-level/flood data is US-only (USGS/NWS); no Android tablet/iPad-specific layouts.
 * Map tile terms (MapTiler) must be checked for commercial + offline use — docs/SETUP.md §3.
 * Moderation is manual via the Supabase dashboard (`reports` table).
+- [Map 4.0: colours, Access Finder, custom pins](docs/MAP_4_0.md)

@@ -36,6 +36,7 @@ function Gate({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="editor" options={{ title: 'Design editor' }} />
         <Stack.Screen name="marketplace" options={{ title: 'Marketplace' }} />
+        <Stack.Screen name="access" options={{ headerShown: false }} />
         <Stack.Screen name="folders" options={{ title: 'Folders' }} />
         <Stack.Screen name="trips" options={{ title: 'Trip planner' }} />
         <Stack.Screen name="navigate" options={{ title: '', headerTransparent: true }} />

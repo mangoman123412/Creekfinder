@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS trips (
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY, cat TEXT NOT NULL, safety INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL, body TEXT, ref TEXT, dedupe TEXT UNIQUE, ts INTEGER NOT NULL, read INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS custom_pins (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT, lat REAL NOT NULL, lng REAL NOT NULL, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS track_points (
   adventure_id TEXT NOT NULL, seq INTEGER NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL,
   alt REAL, acc REAL, ts INTEGER NOT NULL, PRIMARY KEY (adventure_id, seq)
@@ -268,6 +271,13 @@ export async function visitsNear(lat: number, lng: number, radiusM = 150): Promi
 }
 export async function deleteVisit(id: string) { const db = await getDb(); await db.runAsync('DELETE FROM visits WHERE id=?', id); notifyDb(); }
 
+// ------------------------------------------------------------------ custom pins (lightweight map markers, stored on this device)
+export interface CustomPin { id: string; name: string; note: string | null; lat: number; lng: number; created_at: string }
+export async function listCustomPins(): Promise<CustomPin[]> { const db = await getDb(); return db.getAllAsync<CustomPin>('SELECT * FROM custom_pins ORDER BY created_at DESC'); }
+export async function addCustomPin(p: { name: string; lat: number; lng: number; note?: string | null }): Promise<string> { const db = await getDb(); const id = newId(); await db.runAsync('INSERT INTO custom_pins(id,name,note,lat,lng,created_at) VALUES(?,?,?,?,?,?)', id, p.name.trim().slice(0, 60) || 'Pin', p.note ?? null, p.lat, p.lng, nowIso()); notifyDb(); return id; }
+export async function updateCustomPin(id: string, patch: { name?: string; note?: string | null }) { const db = await getDb(); const cur = await db.getFirstAsync<CustomPin>('SELECT * FROM custom_pins WHERE id=?', id); if (!cur) return; await db.runAsync('UPDATE custom_pins SET name=?,note=? WHERE id=?', (patch.name ?? cur.name).trim().slice(0, 60), patch.note === undefined ? cur.note : patch.note, id); notifyDb(); }
+export async function deleteCustomPin(id: string) { const db = await getDb(); await db.runAsync('DELETE FROM custom_pins WHERE id=?', id); notifyDb(); }
+
 // ------------------------------------------------------------------ trips (trip planner)
 export interface TripStop { name: string; lat: number; lng: number; placeId?: string }
 export interface Trip { id: string; name: string; date: string; notes: string | null; stops: TripStop[]; created_at: string }
@@ -423,7 +433,7 @@ export async function countAdventures(): Promise<number> {
 /** Wipe all local user data (sign-out on shared device / account deletion). */
 export async function wipeLocal() {
   const db = await getDb();
-  await db.execAsync('DELETE FROM places; DELETE FROM photos; DELETE FROM adventures; DELETE FROM track_points; DELETE FROM folders; DELETE FROM visits; DELETE FROM trips; DELETE FROM notifications; DELETE FROM kv WHERE key IN (\'folders_seeded\',\'sync_cursor\',\'active_adventure\');');
+  await db.execAsync('DELETE FROM places; DELETE FROM photos; DELETE FROM adventures; DELETE FROM track_points; DELETE FROM folders; DELETE FROM visits; DELETE FROM custom_pins; DELETE FROM trips; DELETE FROM notifications; DELETE FROM kv WHERE key IN (\'folders_seeded\',\'sync_cursor\',\'active_adventure\');');
   await ensureDefaultFolders(db);
   notifyDb();
 }

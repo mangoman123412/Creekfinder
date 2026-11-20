@@ -9,7 +9,8 @@ import { Alert } from '../../src/lib/alert';
 import { CreekMap, type MapPin } from '../../src/components/CreekMap';
 import { Button, IconButton, Pill, Pressy, Text } from '../../src/components/ui';
 import { useDbQuery } from '../../src/state/hooks';
-import { listPlaces, listVisits } from '../../src/db/local';
+import { addCustomPin, deleteCustomPin, listCustomPins, listPlaces, listVisits, updateCustomPin } from '../../src/db/local';
+import { TextPrompt } from '../../src/components/TextPrompt';
 import { useApp } from '../../src/state/app';
 import { canSaveMore, openDirections } from '../../src/lib/actions';
 import { communityInBounds, geocode, searchOsmWater, searchParking } from '../../src/lib/explore';
@@ -53,6 +54,8 @@ function MapTab() {
 
   const places = useDbQuery(() => listPlaces(), [], []);
   const visits = useDbQuery(() => listVisits(300), [], []);
+  const customPins = useDbQuery(() => listCustomPins(), [], []);
+  const [pinPrompt, setPinPrompt] = useState<null | { mode: 'new' } | { mode: 'rename'; id: string; name: string }>(null);
   const S = preset.show;
 
   const loadLayers = useCallback(async () => {
@@ -74,9 +77,10 @@ function MapTab() {
     if (S.community) for (const c of comm) if (!places.data.some((p) => p.source_place_id === c.placeId)) out.push({ id: `c:${c.placeId}`, lat: c.lat, lng: c.lng, name: c.name, group: 'community', kind: c.kind });
     if (S.visited) for (const v of visits.data) out.push({ id: `v:${v.id}`, lat: v.lat, lng: v.lng, name: v.name, group: 'visited', kind: v.kind ?? 'creek' });
     if (S.saved) for (const p of places.data) out.push({ id: `s:${p.id}`, lat: p.lat, lng: p.lng, name: p.name, group: 'saved', kind: p.kind });
+    if (S.customPins !== false) for (const k of customPins.data) out.push({ id: `k:${k.id}`, lat: k.lat, lng: k.lng, name: k.name, group: 'customPin' });
     if (dropped) out.push({ id: 'dropped', lat: dropped.lat, lng: dropped.lng, name: 'Dropped pin', group: 'target' });
     return out;
-  }, [places.data, visits.data, comm, osm, parking, S.saved, S.community, S.nearbyWater, S.parking, S.visited, dropped]);
+  }, [places.data, visits.data, customPins.data, comm, osm, parking, S.saved, S.community, S.nearbyWater, S.parking, S.visited, S.customPins, dropped]);
 
   const locate = async () => {
     if (!(await ensureForegroundPermission())) { Alert.alert('Location off', 'Allow location access to see yourself on the map.'); return; }
@@ -104,6 +108,8 @@ function MapTab() {
 
   const savedSel = sel?.id.startsWith('s:') ? places.data.find((p) => p.id === sel.id.slice(2)) : null;
   const osmSel = sel?.id.startsWith('o:') ? osm.find((i) => i.key === sel.id.slice(2)) : null;
+  const customSel = sel?.id.startsWith('k:') ? customPins.data.find((k) => k.id === sel.id.slice(2)) : null;
+  const openAccess = (lat: number, lng: number, name: string) => router.push({ pathname: '/access', params: { lat: String(lat), lng: String(lng), name } });
   const visitSel = sel?.id.startsWith('v:') ? visits.data.find((v) => v.id === sel.id.slice(2)) : null;
   const openGuide = () => {
     if (!sel) return;
@@ -165,6 +171,7 @@ function MapTab() {
             <Toggle label="Community creeks" dot={colors.markerCommunity} on={S.community} onPress={() => setShow('community', !S.community)} />
             <Toggle label="Visited places" dot={colors.markerVisited} on={S.visited} onPress={() => setShow('visited', !S.visited)} />
             <Toggle label="Parking areas" dot={colors.markerParking} on={S.parking} onPress={() => setShow('parking', !S.parking)} />
+            <Toggle label="My custom pins" dot={colors.markerSaved} on={S.customPins !== false} onPress={() => setShow('customPins', !(S.customPins !== false))} />
             <Toggle label="Hiking trail routes" dot="#D9562B" on={S.hikingTrails} onPress={() => setShow('hikingTrails', !S.hikingTrails)} />
           </Animated.View>
         )}
@@ -173,14 +180,29 @@ function MapTab() {
       {sel && sel.id !== 'dropped' && (
         <Animated.View entering={FadeInDown.duration(250)} style={[{ position: 'absolute', left: 14, right: 14, bottom: bottomGap, backgroundColor: colors.surface, borderRadius: radius.lg, padding: space.lg }, shadow.float]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ flex: 1 }}><Text style={font.h2} numberOfLines={1}>{sel.name}</Text><Text style={font.small}>{sel.group === 'parking' ? 'Parking area' : kindLabel(sel.kind ?? 'creek')}{me ? `  ·  ${formatDistance(haversine(me, sel), imperial)} away` : ''}</Text></View>
-            <Pill tone={sel.group === 'community' ? 'water' : sel.group === 'saved' ? 'ok' : 'neutral'} label={({ community: 'Community', saved: savedSel?.visibility === 'public' ? 'Saved · shared' : 'Saved', visited: 'Visited', parking: 'Parking', osm: 'OpenStreetMap', target: 'Pin' } as any)[sel.group]} />
+            <View style={{ flex: 1 }}><Text style={font.h2} numberOfLines={1}>{sel.name}</Text><Text style={font.small}>{sel.group === 'parking' ? 'Parking area' : sel.group === 'customPin' ? (customSel?.note || 'Your custom pin') : kindLabel(sel.kind ?? 'creek')}{me ? `  ·  ${formatDistance(haversine(me, sel), imperial)} away` : ''}</Text></View>
+            <Pill tone={sel.group === 'community' ? 'water' : sel.group === 'saved' ? 'ok' : 'neutral'} label={({ community: 'Community', saved: savedSel?.visibility === 'public' ? 'Saved · shared' : 'Saved', visited: 'Visited', parking: 'Parking', osm: 'OpenStreetMap', target: 'Pin', customPin: 'Custom pin' } as any)[sel.group]} />
           </View>
+          {sel.group === 'customPin' && customSel ? (
+            <View style={{ gap: 8, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Button small icon="location" title="Save as a creek" style={{ flex: 1.3 }} onPress={async () => { if (await canSaveMore(premium, router.push)) router.push({ pathname: '/save', params: { lat: String(customSel.lat), lng: String(customSel.lng), name: customSel.name } }); }} />
+                <Button small variant="secondary" icon="enter" title="Access" style={{ flex: 1 }} onPress={() => openAccess(customSel.lat, customSel.lng, customSel.name)} />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Button small variant="secondary" icon="navigate" title="Find it" style={{ flex: 1 }} onPress={() => router.push({ pathname: '/navigate', params: { lat: String(customSel.lat), lng: String(customSel.lng), name: customSel.name } })} />
+                <Button small variant="secondary" icon="create" title="Rename" style={{ flex: 1 }} onPress={() => setPinPrompt({ mode: 'rename', id: customSel.id, name: customSel.name })} />
+                <Button small variant="danger" icon="trash" title="Delete" style={{ flex: 1 }} onPress={() => Alert.alert(`Delete “${customSel.name}”?`, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { await deleteCustomPin(customSel.id); setSel(null); } }])} />
+              </View>
+            </View>
+          ) : (<>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
             <Button small icon="book" title={sel.group === 'parking' ? 'Details' : 'Open guide'} style={{ flex: 1.3 }} onPress={openGuide} />
             <Button small variant="secondary" icon="navigate" title="Find it" style={{ flex: 1 }} onPress={() => router.push({ pathname: '/navigate', params: { lat: String(sel.lat), lng: String(sel.lng), name: sel.name } })} />
             <Button small variant="secondary" icon="car" title="Drive" style={{ flex: 1 }} onPress={() => openDirections(sel.name, sel.lat, sel.lng)} />
           </View>
+          <View style={{ marginTop: 8 }}><Button small variant="secondary" icon="enter" title="How do I get in? (entrances, parking, routes)" onPress={() => openAccess(sel.lat, sel.lng, sel.name)} /></View>
+          </>)}
         </Animated.View>
       )}
       {dropped && !sel && (
@@ -190,6 +212,10 @@ function MapTab() {
             <Button small icon="location" title="Save a creek here" style={{ flex: 1.5 }} onPress={saveHere} />
             <Button small variant="secondary" icon="navigate" title="Find it" style={{ flex: 1 }} onPress={() => router.push({ pathname: '/navigate', params: { lat: String(dropped.lat), lng: String(dropped.lng), name: 'Dropped pin' } })} />
             <Button small variant="ghost" title="Clear" onPress={() => setDropped(null)} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <Button small variant="secondary" icon="enter" title="Find access" style={{ flex: 1 }} onPress={() => openAccess(dropped.lat, dropped.lng, 'Dropped pin')} />
+            <Button small variant="secondary" icon="pin" title="Keep as custom pin" style={{ flex: 1.3 }} onPress={() => setPinPrompt({ mode: 'new' })} />
           </View>
         </Animated.View>
       )}
@@ -201,6 +227,8 @@ function MapTab() {
           <Text style={{ color: '#fff', fontSize: 11.5, marginTop: 6, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4, fontWeight: '600' }}>Press & hold the map to drop a pin</Text>
         </View>
       )}
+      <TextPrompt visible={!!pinPrompt} title={pinPrompt?.mode === 'rename' ? 'Rename pin' : 'Name this pin'} initial={pinPrompt?.mode === 'rename' ? pinPrompt.name : ''} placeholder="e.g. Rope swing hole" onCancel={() => setPinPrompt(null)}
+        onSubmit={async (v) => { if (pinPrompt?.mode === 'rename') await updateCustomPin(pinPrompt.id, { name: v }); else if (dropped) { await addCustomPin({ name: v, lat: dropped.lat, lng: dropped.lng }); setDropped(null); } setPinPrompt(null); }} />
     </View>
   );
 }

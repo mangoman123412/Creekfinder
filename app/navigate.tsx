@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { CreekMap } from '../src/components/CreekMap';
 import { Button } from '../src/components/ui';
-import { getAdventure, getPlace, getTrackPoints } from '../src/db/local';
+import { getAdventure, getPlace, getTrackPoints, kvGet } from '../src/db/local';
 import { ensureForegroundPermission, watchFixes, watchHeading, type Fix } from '../src/lib/location';
 import { bearing, compassLabel, formatDistance, haversine, nearestIndex, pathLength } from '../src/lib/geo';
 import { openDirections } from '../src/lib/actions';
@@ -26,7 +26,8 @@ type Target = { name: string; lat: number; lng: number };
  */
 function Navigate() {
   const s = getS();
-  const q = useLocalSearchParams<{ id?: string; lat?: string; lng?: string; name?: string; adventure?: string }>();
+  const q = useLocalSearchParams<{ id?: string; lat?: string; lng?: string; name?: string; adventure?: string; route?: string }>();
+  const [forward, setForward] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { imperial } = useApp();
@@ -46,7 +47,12 @@ function Navigate() {
         setTarget({ name: `Start of "${a?.name ?? 'adventure'}"`, lat: pts[0].lat, lng: pts[0].lng });
       });
     }
-  }, [q.id, q.adventure]);
+    if (q.route) {
+      void kvGet('nav_route').then((raw) => {
+        try { const r = JSON.parse(raw ?? 'null'); const pts = (r.coords as [number, number][]).map(([lng, lat]) => ({ lat, lng })); if (!pts.length) return; setTrack(pts); setForward(true); setTarget({ name: r.name, lat: pts[pts.length - 1].lat, lng: pts[pts.length - 1].lng }); } catch { Alert.alert('Route unavailable', 'Open the Access Finder and choose the route again.'); }
+      });
+    }
+  }, [q.id, q.adventure, q.route]);
 
   useEffect(() => {
     let offA: (() => void) | undefined, offB: (() => void) | undefined;
@@ -61,12 +67,13 @@ function Navigate() {
   // For a retrace, guide along the recorded path (reversed) rather than as the crow flies.
   const route = useMemo(() => {
     if (!target) return [];
+    if (forward && track.length && me) { const i = nearestIndex(track, me); return [{ lat: me.lat, lng: me.lng }, ...track.slice(i)]; }   // follow a planned route toward the spot
     if (track.length && me) {
       const i = nearestIndex(track, me);
       return [{ lat: me.lat, lng: me.lng }, ...track.slice(0, i + 1).reverse()];
     }
     return me ? [{ lat: me.lat, lng: me.lng }, target] : [];
-  }, [track, me, target]);
+  }, [track, me, target, forward]);
 
   useEffect(() => { if (followed && me) cam.current?.easeTo({ center: [me.lng, me.lat], zoom: 17, duration: 600 }); }, [me, followed]);
 
@@ -108,7 +115,7 @@ function Navigate() {
         </Text>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
           <Button small variant="secondary" icon="locate" title="Recenter" onPress={() => setFollowed(true)} style={{ flex: 1 }} />
-          {target && !q.adventure && <Button small variant="secondary" icon="car" title="Driving directions" onPress={() => openDirections(target.name, target.lat, target.lng)} style={{ flex: 1.3 }} />}
+          {target && !q.adventure && !q.route && <Button small variant="secondary" icon="car" title="Driving directions" onPress={() => openDirections(target.name, target.lat, target.lng)} style={{ flex: 1.3 }} />}
           <Button small variant="ghost" title="Done" onPress={() => router.back()} />
         </View>
       </View>

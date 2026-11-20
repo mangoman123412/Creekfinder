@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { OFFICIAL_SCHEMES, sanitizeFeatureStyles, type ColorScheme, type FeatureStyles } from './mapFeatures';
 import {
   DEFAULTS, OFFICIAL_MAP_PRESETS, defaultLibrary, sanitize, sanitizeLibrary, sanitizeMapPreset, sanitizeTheme, type AppProfile, type Library, type MapPreset, type SavedTheme, type Settings, type ThemeSpec,
 } from './schema';
@@ -112,6 +113,18 @@ export function updateActiveMapPreset(fn: (p: MapPreset) => void) {
   const cur = getMapPreset(); const draft = clone(cur); fn(draft);
   if (cur.official) { draft.id = uid('map'); draft.official = false; draft.name = `${cur.name} (mine)`; }
   saveMapPreset(draft, true);
+}
+
+// ------------------------------------------------------------------ map colour schemes
+export const allSchemes = (l: Library = lib): ColorScheme[] => [...OFFICIAL_SCHEMES, ...l.colorSchemes];
+export function saveScheme(name: string, styles: FeatureStyles): string {
+  const id = uid('scheme'); commit({ ...lib, colorSchemes: [...lib.colorSchemes, { id, name: name.trim().slice(0, 40) || 'My colours', styles: sanitizeFeatureStyles(clone(styles)) }] }, 'map'); return id;
+}
+export const deleteScheme = (id: string) => commit({ ...lib, colorSchemes: lib.colorSchemes.filter((s) => s.id !== id) }, 'map');
+/** Apply a colour scheme to the active map preset (forks a copy if the preset is built in). */
+export const applyScheme = (styles: FeatureStyles) => updateActiveMapPreset((p) => { p.featureStyles = sanitizeFeatureStyles(clone(styles)); });
+export function setFeatureStyle(id: import('./mapFeatures').FeatureId, patch: Partial<import('./mapFeatures').FeatureStyle> | null) {
+  updateActiveMapPreset((p) => { if (patch === null) delete p.featureStyles[id]; else p.featureStyles[id] = { ...(p.featureStyles[id] ?? {}), ...patch }; });
 }
 
 export function replaceLibrary(next: Library, reason = 'remote') { lib = { ...sanitizeLibrary(next) }; emit(reason); }

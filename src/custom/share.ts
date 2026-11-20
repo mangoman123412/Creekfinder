@@ -1,3 +1,4 @@
+import { sanitizeFeatureStyles, type FeatureStyles } from './mapFeatures';
 import { SCHEMA_VERSION, defaultLibrary, sanitize, sanitizeLibrary, sanitizeMapPreset, sanitizeTheme, sanitizeWidgets, type AppProfile, type Library, type MapPreset, type Settings, type ThemeSpec, type WidgetInstance } from './schema';
 
 /**
@@ -6,7 +7,7 @@ import { SCHEMA_VERSION, defaultLibrary, sanitize, sanitizeLibrary, sanitizeMapP
  * On import every field is validated and clamped against the schema (unknown keys are dropped, colours must be hex, lists must use
  * known ids…). Nothing is ever evaluated or executed. `sum` is an integrity checksum (detects truncated/corrupted codes).
  */
-export type ShareKind = 'theme' | 'layout' | 'profile' | 'mappreset' | 'library';
+export type ShareKind = 'theme' | 'layout' | 'profile' | 'mappreset' | 'library' | 'colorscheme';
 export const MAX_CODE = 120_000;
 const PREFIX = 'CF1:';
 
@@ -30,6 +31,7 @@ export type Decoded =
   | { ok: true; kind: 'profile'; name: string; icon: string; settings: Settings }
   | { ok: true; kind: 'mappreset'; name: string; preset: MapPreset }
   | { ok: true; kind: 'library'; name: string; library: Library }
+  | { ok: true; kind: 'colorscheme'; name: string; styles: FeatureStyles }
   | { ok: false; error: string };
 
 export function decodeShare(text: string): Decoded {
@@ -49,6 +51,7 @@ export function decodeShare(text: string): Decoded {
       case 'layout': return { ok: true, kind: 'layout', name, widgets: sanitizeWidgets(p.widgets) };
       case 'profile': return { ok: true, kind: 'profile', name, icon: typeof p.icon === 'string' ? p.icon.slice(0, 30) : 'leaf', settings: sanitize(p.settings) };
       case 'mappreset': return { ok: true, kind: 'mappreset', name, preset: sanitizeMapPreset({ ...p.preset, name }) };
+      case 'colorscheme': return { ok: true, kind: 'colorscheme', name, styles: sanitizeFeatureStyles(p.styles) };
       case 'library': return { ok: true, kind: 'library', name, library: sanitizeLibrary(p.library) };
       default: return { ok: false, error: 'Unknown design type.' };
     }

@@ -1,15 +1,17 @@
-import React, { useEffect, useImperativeHandle, useRef } from 'react';
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { View } from 'react-native';
 import type { CreekMapProps, MapPin } from './CreekMap';
 import { colors } from '../theme';
-import { useActiveMapPreset, useMapStyle, groupColors } from '../custom/useMapPrefs';
+import { useActiveMapPreset, useMapStyle, groupColors, groupSizes, overlayOn } from '../custom/useMapPrefs';
+import { useOsmOverlay } from '../custom/useOverlay';
+import { overlayLayerSpecs, type View as MapView } from '../custom/osmOverlay';
 import { markerPixels } from '../custom/markerImage';
 import type { MapPreset } from '../custom/schema';
 
 export type { MapPin, PinGroup, CreekMapProps } from './CreekMap';
 const empty = { type: 'FeatureCollection', features: [] as any[] };
 const pad = (p?: any) => ({ top: p?.top ?? 0, bottom: p?.bottom ?? 0, left: p?.left ?? 0, right: p?.right ?? 0 });
-const GROUPS = ['saved', 'community', 'osm', 'visited', 'parking', 'target'] as const;
+const GROUPS = ['saved', 'community', 'osm', 'visited', 'parking', 'target', 'customPin', 'campsite', 'trailEntrance', 'creekAccess', 'bridge'] as const;
 
 export const brightnessOverlay = (b: number) => (b === 0 ? null : b > 0 ? `rgba(255,255,255,${Math.min(0.55, b * 0.9)})` : `rgba(0,0,0,${Math.min(0.6, -b * 1.1)})`);
 
@@ -23,7 +25,11 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
   const ready = useRef(false);
   const props = useRef(p); props.current = p;
   const presetRef = useRef(preset); presetRef.current = preset;
+  const overlayOnRef = useRef(false); const overlayDataRef = useRef<any>({ type: 'FeatureCollection', features: [] }); const viewRef = useRef<MapView | null>(null); const routesRef = useRef(p.routes); routesRef.current = p.routes;
   const userDot = useRef<any>(null); const watchId = useRef<number | null>(null);
+  const [view, setView] = useState<MapView | null>(null); const viewT = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ovOn = overlayOn(preset); const ov = useOsmOverlay(view, ovOn);
+  const ovLayers = useRef<string[]>([]);
 
   useImperativeHandle(p.cameraRef as any, () => ({
     jumpTo: (o: any) => map.current?.jumpTo({ center: o.center, zoom: o.zoom }),
@@ -35,7 +41,7 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
 
   const gcOf = () => groupColors(presetRef.current);
   const setData = (id: string, data: any) => { const s = map.current?.getSource(id); if (s) s.setData(data); };
-  const pinsFc = () => { const gc = gcOf(); return { type: 'FeatureCollection', features: (props.current.pins ?? []).map((pin) => ({ type: 'Feature', id: pin.id, properties: { id: pin.id, name: pin.name, group: pin.group, color: gc[pin.group] }, geometry: { type: 'Point', coordinates: [pin.lng, pin.lat] } })) }; };
+  const pinsFc = () => { const gc = gcOf(); return { type: 'FeatureCollection', features: (props.current.pins ?? []).map((pin) => ({ type: 'Feature', id: pin.id, properties: { id: pin.id, name: pin.name, group: pin.group, color: gc[pin.group], sz: groupSizes(presetRef.current)[pin.group] ?? 1 }, geometry: { type: 'Point', coordinates: [pin.lng, pin.lat] } })) }; };
   const lineFc = (pts?: { lat: number; lng: number }[]) => ({ type: 'FeatureCollection', features: pts && pts.length > 1 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.map((t) => [t.lng, t.lat]) } }] : [] });
   const trackFc = () => { const q = props.current; if (q.multiTrack?.length) return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: q.multiTrack.filter((l) => l.length > 1).map((l) => l.map((t) => [t.lng, t.lat])) } }] }; return lineFc(q.track); };
 
@@ -52,17 +58,30 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
       m.addLayer({ id: 'pins-cluster', type: 'circle', source: 'pins', filter: ['has', 'point_count'], paint: { 'circle-color': colors.primaryDeep, 'circle-radius': 17, 'circle-stroke-width': 2.5, 'circle-stroke-color': '#fff' } });
       m.addLayer({ id: 'pins-count', type: 'symbol', source: 'pins', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Bold'], 'text-size': 13 }, paint: { 'text-color': '#ffffff' } });
       m.addLayer({ id: 'pins-sel', type: 'circle', source: 'pins', filter: ['==', ['get', 'id'], ''], paint: { 'circle-color': '#FFD54A', 'circle-radius': 17 * size, 'circle-opacity': 0.9 } });
-      m.addLayer({ id: 'pins-dot', type: 'symbol', source: 'pins', filter: ['!', ['has', 'point_count']], layout: { 'icon-image': ['concat', 'pin-', ['get', 'group']], 'icon-size': size, 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
+      m.addLayer({ id: 'pins-dot', type: 'symbol', source: 'pins', filter: ['!', ['has', 'point_count']], layout: { 'icon-image': ['concat', 'pin-', ['get', 'group']], 'icon-size': ['*', size, ['get', 'sz']], 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
     });
-    ready.current = true; sync();
+    add(() => { m.addSource('cf-routes', { type: 'geojson', data: empty }); m.addLayer({ id: 'cf-routes-casing', type: 'line', source: 'cf-routes', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#fff', 'line-width': ['+', ['get', 'w'], 3], 'line-opacity': 0.85 } }, 'pins-cluster'); m.addLayer({ id: 'cf-routes-line', type: 'line', source: 'cf-routes', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'w'] } }, 'pins-cluster'); });
+    ready.current = true; sync(); syncOverlay();
+  };
+  /** (Re)build the OpenStreetMap overlay layers from the user's feature styles, under the pins. */
+  const syncOverlay = () => {
+    const m = map.current; if (!m || !ready.current) return;
+    for (const id of ovLayers.current) if (m.getLayer(id)) m.removeLayer(id);
+    ovLayers.current = []; if (m.getSource('cf-osm') && !overlayOnRef.current) { m.removeSource('cf-osm'); return; }
+    if (!overlayOnRef.current) return;
+    if (!m.getSource('cf-osm')) m.addSource('cf-osm', { type: 'geojson', data: overlayDataRef.current });
+    else m.getSource('cf-osm').setData(overlayDataRef.current);
+    const before = m.getLayer('cf-routes-casing') ? 'cf-routes-casing' : 'pins-cluster';
+    for (const s of overlayLayerSpecs(presetRef.current.featureStyles, presetRef.current.halo, viewRef.current?.zoom ?? 14)) { try { m.addLayer(s, before); ovLayers.current.push(s.id); } catch {} }
   };
   const sync = () => {
     if (!ready.current || !map.current) return;
     const m = map.current; const pr = presetRef.current; const gc = gcOf();
     for (const g of GROUPS) { const name = `pin-${g}`; if (m.hasImage(name)) m.removeImage(name); m.addImage(name, markerPixels(pr.markers.shape, gc[g]), { pixelRatio: 2 }); }
-    if (m.getLayer('pins-dot')) m.setLayoutProperty('pins-dot', 'icon-size', pr.markers.size);
+    if (m.getLayer('pins-dot')) m.setLayoutProperty('pins-dot', 'icon-size', ['*', pr.markers.size, ['get', 'sz']]);
     if (m.getLayer('pins-sel')) { m.setPaintProperty('pins-sel', 'circle-radius', 17 * pr.markers.size); m.setFilter('pins-sel', ['==', ['get', 'id'], props.current.selectedId ?? '']); }
     setData('pins', pinsFc()); setData('track', trackFc()); setData('guide', lineFc(props.current.guide));
+    setData('cf-routes', { type: 'FeatureCollection', features: (routesRef.current ?? []).map((r) => ({ type: 'Feature', properties: { color: r.color, w: r.width ?? 4 }, geometry: { type: 'LineString', coordinates: r.coords } })) });
   };
 
   useEffect(() => {
@@ -81,7 +100,7 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
     m.on('touchmove', (e: any) => { if (start && e.point.dist(start) > 8) cancel(); });
     m.on('touchend', cancel); m.on('touchcancel', cancel); m.on('dragstart', cancel); m.on('zoomstart', cancel);
     m.on('contextmenu', (e: any) => props.current.onLongPress?.(e.lngLat.lat, e.lngLat.lng));
-    m.on('moveend', (e: any) => { const b = m.getBounds(); const c = m.getCenter(); props.current.onRegionChange?.({ center: [c.lng, c.lat], zoom: m.getZoom(), bounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], userInteraction: !!e.originalEvent }); });
+    m.on('moveend', (e: any) => { const b = m.getBounds(); const c = m.getCenter(); if (viewT.current) clearTimeout(viewT.current); const vv = { bounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()] as [number, number, number, number], zoom: m.getZoom() }; viewT.current = setTimeout(() => setView(vv), 500); props.current.onRegionChange?.({ center: [c.lng, c.lat], zoom: m.getZoom(), bounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], userInteraction: !!e.originalEvent }); });
     m.on('movestart', (e: any) => { if (e.originalEvent) props.current.onRegionChange?.({ center: [m.getCenter().lng, m.getCenter().lat], zoom: m.getZoom(), bounds: [0, 0, 0, 0], userInteraction: true }); });
     if (props.current.showUser !== false && 'geolocation' in navigator) {
       const el = document.createElement('div'); el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#1E88C7;border:3px solid #fff;box-shadow:0 0 0 2px rgba(30,136,199,.35)';
@@ -94,7 +113,10 @@ export function CreekMap(p: CreekMapProps & { cameraRef?: React.Ref<any>; mapRef
   // style (map type, layer visibility, brightness-in-raster, hiking overlay) changed -> swap style, then layers are re-created on style.load
   const lastStyle = useRef<any>(style);
   useEffect(() => { const m = map.current; if (!m || lastStyle.current === style) return; lastStyle.current = style; ready.current = false; m.setStyle(style, { diff: false }); }, [style]);
-  useEffect(sync, [p.pins, p.track, p.multiTrack, p.guide, p.selectedId, preset.markers.size, preset.markers.shape, JSON.stringify(preset.markers.colors), colors.markerSaved, colors.markerCommunity, colors.markerOsm]); // eslint-disable-line react-hooks/exhaustive-deps
+  overlayOnRef.current = ovOn; overlayDataRef.current = ov.data; viewRef.current = view;
+  useEffect(() => { syncOverlay(); }, [ovOn, ov.data, JSON.stringify(preset.featureStyles), preset.halo, (view?.zoom ?? 14) >= 15.5]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ready.current) sync(); }, [p.routes]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(sync, [p.pins, p.track, p.multiTrack, p.guide, p.selectedId, preset.markers.size, preset.markers.shape, JSON.stringify(preset.markers.colors), JSON.stringify(preset.featureStyles), colors.markerSaved, colors.markerCommunity, colors.markerOsm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const overlay = brightnessOverlay(brightness);
   return (

@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Alert } from '../lib/alert';
 import { Button, Text } from '../components/ui';
 import { MiniPhone, type DeviceId } from './MiniPhone';
-import { useSettings, addImportedProfile, applyThemeSpec, createMapPreset, saveMapPreset, mutate, replaceLibrary, getLibrary } from './store';
+import { useSettings, addImportedProfile, applyThemeSpec, createMapPreset, saveMapPreset, mutate, replaceLibrary, getLibrary, applyScheme } from './store';
 import { decodeShare } from './share';
 import { colors, font, radius, shadow } from '../theme';
 import type { Settings } from './schema';
@@ -47,6 +47,7 @@ export function applyDecoded(d: ReturnType<typeof decodeShare>): string {
     case 'layout': mutate((s) => { s.home.widgets = d.widgets; }); return `Home layout “${d.name}” applied.`;
     case 'profile': addImportedProfile({ name: d.name, icon: d.icon, settings: d.settings }); return `Profile “${d.name}” added to your profiles.`;
     case 'mappreset': { const id = createMapPreset(d.name, d.preset); void id; saveMapPreset; return `Map preset “${d.name}” added and selected.`; }
+    case 'colorscheme': applyScheme(d.styles); return `Map colours “${d.name}” applied to your current map preset.`;
     case 'library': replaceLibrary(sanitizeLibrary(d.library), 'edit'); return 'All customization restored from the file.'; 
   }
 }
@@ -57,7 +58,7 @@ export function PasteImport({ label = 'Import a design code' }: { label?: string
   const go = (t: string) => {
     const d = decodeShare(t);
     if (!d.ok) { Alert.alert('Can’t import', d.error); return; }
-    const what = { theme: 'theme', layout: 'home layout', profile: 'profile', mappreset: 'map preset', library: 'complete backup (replaces ALL your customization)' }[d.kind];
+    const what = { theme: 'theme', layout: 'home layout', profile: 'profile', mappreset: 'map preset', colorscheme: 'set of map colours', library: 'complete backup (replaces ALL your customization)' }[d.kind];
     Alert.alert(`Import ${what}?`, `“${d.name}” — it contains settings only (colours, layouts, preferences) and cannot run code.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Import', onPress: () => { Alert.alert('Done', applyDecoded(d)); setText(''); } }]);
   };
   const file = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,.txt,.creekfinder'; i.onchange = async () => { const f = i.files?.[0]; if (f && f.size < 200_000) go(await f.text()); }; i.click(); };

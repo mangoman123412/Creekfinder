@@ -27,6 +27,7 @@ import {
 } from '../src/lib/community';
 import { attributionNote, commonsPhotos, elevationM, osmTags, plantsNear, reverseGeocode, surroundings, waterPhotosNear, wikipediaNear, wildlifeNear, isTree, type Surroundings } from '../src/lib/guide';
 import { getNearbyGauges, type Gauge } from '../src/lib/safety';
+import { findAccess } from '../src/lib/access';
 import { guideHref } from '../src/lib/nav';
 import { kindIcon, kindLabel, type Place, type PlaceKind } from '../src/types';
 import { colors, font, radius, shadow, space } from '../src/theme';
@@ -92,6 +93,8 @@ function CreekGuide() {
   const ownUris = usePhotoUris(ownPhotos.data);
   const folders = useDbQuery(listFolders, [], []);
   const settings = useSettings();
+  const wantAccess = settings.detail.sections.some((s) => s.id === 'entrances' && s.visible);
+  const access = useLoad(() => (ready && online && wantAccess ? findAccess({ lat, lng }) : Promise.resolve(null)), [ready, lat, lng, online, wantAccess]);
   const [layoutOv, setLayoutOv] = useState<'compact' | 'standard' | 'detailed' | null>(null);
   const layout = layoutOv ?? settings.detail.layout;
   const visitsHere = useDbQuery(() => (ready ? visitsNear(lat, lng, 150) : Promise.resolve([])), [ready, lat, lng], []);
@@ -269,6 +272,21 @@ function CreekGuide() {
               { icon: 'trail-sign', label: 'Nearest road', value: road ? `${road.name} · ${formatDistance(road.distance_m, imperial)}` : null, source: 'OpenStreetMap', loading: loadingSurr },
             ]} />
           </GuideSection>);
+      case 'entrances': {
+        const a = access.data?.result; const b = a?.routes[0]; const accessLink = () => router.push({ pathname: '/access', params: { lat: String(lat), lng: String(lng), name: ent.name } });
+        return (
+          <GuideSection key={id} icon="enter" title="Access finder" sub="How to get in: entrances, legal-looking parking, bridges, paths and walking routes">
+            <Facts items={[
+              { icon: 'walk', label: 'Best walking route found', value: b ? `${formatDistance(b.walk_m, imperial)} · ~${b.minutes} min from ${b.from.name}` : null, note: b ? (b.confidence === 'tagged-public' ? 'All ways tagged public' : 'Unverified — confirm access') : 'No mapped route', source: 'OpenStreetMap paths', loading: access.loading && online },
+              { icon: 'enter', label: 'Nearest trail entrance', value: a && (a.trailheads[0] ?? a.entrances[0]) ? `${(a.trailheads[0] ?? a.entrances[0]).name} · ${formatDistance((a.trailheads[0] ?? a.entrances[0]).walk_m ?? (a.trailheads[0] ?? a.entrances[0]).straight_m, imperial)}${(a.trailheads[0] ?? a.entrances[0]).walk_m != null ? ' walk' : ' away'}` : null, source: 'OpenStreetMap', loading: access.loading && online },
+              { icon: 'car', label: 'Nearest parking', value: a?.parking[0] ? `${a.parking[0].name} · ${formatDistance(a.parking[0].walk_m ?? a.parking[0].straight_m, imperial)}${a.parking[0].walk_m != null ? ' walk' : ' away'}` : null, note: a?.parking[0] ? (a.parking[0].access === 'public' ? 'Tagged public' : 'Access not tagged') : undefined, loading: access.loading && online },
+              { icon: 'trail-sign', label: 'Nearest road access', value: a?.nearestRoad ? `${a.nearestRoad.name} · ${formatDistance(a.nearestRoad.straight_m, imperial)}` : null, loading: access.loading && online },
+              ...(layout !== 'compact' ? [{ icon: 'git-compare', label: 'Bridges crossing the creek', value: a ? (a.bridges.filter((x) => x.crossesWaterway).length ? `${a.bridges.filter((x) => x.crossesWaterway).length} nearby (closest ${formatDistance(a.bridges.filter((x) => x.crossesWaterway)[0].straight_m, imperial)})` : null) : null, loading: access.loading && online } as FactItem] : []),
+            ]} />
+            <View style={{ marginTop: 10 }}><Button icon="map" title="Open the Access Finder" onPress={accessLink} /></View>
+            <Text style={[font.small, { marginTop: 8 }]}>Built from OpenStreetMap only. It can’t know land ownership — confirm access yourself and never trespass.</Text>
+          </GuideSection>);
+      }
       case 'access':
         return (
           <GuideSection key={id} icon="key" title="Access information">

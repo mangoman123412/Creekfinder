@@ -11,6 +11,7 @@ function SettingsLayout() {
       <Stack.Screen name="home" options={{ title: 'Home screen' }} />
       <Stack.Screen name="navigation" options={{ title: 'Navigation' }} />
       <Stack.Screen name="map" options={{ title: 'Map customization' }} />
+      <Stack.Screen name="mapcolors" options={{ title: 'Map colours' }} />
       <Stack.Screen name="details" options={{ title: 'Creek details' }} />
       <Stack.Screen name="saved" options={{ title: 'Saved locations' }} />
       <Stack.Screen name="tracking" options={{ title: 'GPS tracking' }} />

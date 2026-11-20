@@ -1,4 +1,5 @@
 import { normHex } from './colorUtils';
+import { sanitizeFeatureStyles, sanitizeSchemes, type ColorScheme, type FeatureStyles } from './mapFeatures';
 
 /**
  * THE central customization schema. Every customizable thing in the app is described here once:
@@ -6,7 +7,7 @@ import { normHex } from './colorUtils';
  * and (if needed) to `sanitize()` — storage, profiles, cloud sync, import/export and the marketplace pick it up automatically.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // ------------------------------------------------------------------ theme
 export interface Seeds {
@@ -133,12 +134,18 @@ export interface MapPreset {
   layers: { labels: boolean; roads: boolean; trails: boolean; waterways: boolean; contours: boolean; hillshade: boolean };
   brightness: number;
   defaultZoom: number; autoCenter: boolean;
-  show: { saved: boolean; community: boolean; visited: boolean; parking: boolean; hikingTrails: boolean; nearbyWater: boolean };
+  show: { saved: boolean; community: boolean; visited: boolean; parking: boolean; hikingTrails: boolean; nearbyWater: boolean; customPins?: boolean };
+  /** per-feature colours / widths / opacity / dashes / marker sizes (Map Colors) */
+  featureStyles: FeatureStyles;
+  /** draw OpenStreetMap features on top of the map in the user's colours: auto = only on satellite/hybrid */
+  overlay: 'auto' | 'on' | 'off';
+  /** dark/white outline under overlay lines so colours stay visible on any background */
+  halo: boolean;
 }
 const preset = (id: string, name: string, icon: string, style: MapStyleId, over: Partial<MapPreset> = {}): MapPreset => ({
   id, name, icon, official: true, style, markers: { size: 1, shape: 'circle', colors: {} },
   layers: { labels: true, roads: true, trails: true, waterways: true, contours: false, hillshade: true }, brightness: 0, defaultZoom: 12, autoCenter: true,
-  show: { saved: true, community: false, visited: false, parking: false, hikingTrails: false, nearbyWater: true }, ...over,
+  show: { saved: true, community: false, visited: false, parking: false, hikingTrails: false, nearbyWater: true, customPins: true }, featureStyles: {}, overlay: 'auto', halo: true, ...over,
 });
 export const OFFICIAL_MAP_PRESETS: MapPreset[] = [
   preset('map-default', 'Default', 'map', 'standard'),
@@ -147,16 +154,16 @@ export const OFFICIAL_MAP_PRESETS: MapPreset[] = [
   preset('map-waterfall', 'Waterfall Map', 'arrow-down-circle', 'terrain', { markers: { size: 1.3, shape: 'triangle', colors: { markerSaved: '#1B8FD0' } }, layers: { labels: true, roads: true, trails: true, waterways: true, contours: true, hillshade: true }, show: { saved: true, community: true, visited: false, parking: true, hikingTrails: true, nearbyWater: true }, defaultZoom: 13 }),
   preset('map-fishing', 'Fishing Map', 'fish', 'standard', { markers: { size: 1.1, shape: 'star', colors: {} }, layers: { labels: true, roads: true, trails: false, waterways: true, contours: false, hillshade: false }, show: { saved: true, community: true, visited: true, parking: true, hikingTrails: false, nearbyWater: true }, defaultZoom: 14 }),
   preset('map-satellite', 'Satellite Exploration', 'earth', 'satellite', { markers: { size: 1.15, shape: 'ring', colors: {} }, layers: { labels: false, roads: false, trails: false, waterways: true, contours: false, hillshade: false }, show: { saved: true, community: true, visited: false, parking: false, hikingTrails: false, nearbyWater: true }, defaultZoom: 15 }),
-];
+].map((p) => ({ ...p, show: { ...p.show, customPins: true } }));
 export const defaultMapPreset = () => OFFICIAL_MAP_PRESETS[0];
 
 // ------------------------------------------------------------------ creek detail sections
-export type DetailSectionId = 'gallery' | 'coordinates' | 'elevation' | 'depth' | 'clarity' | 'temperature' | 'flow' | 'width' | 'waterfalls' | 'terrain' | 'trails' | 'parking' | 'access' | 'reviews' | 'reports' | 'weather' | 'nearby' | 'history';
+export type DetailSectionId = 'gallery' | 'coordinates' | 'elevation' | 'depth' | 'clarity' | 'temperature' | 'flow' | 'width' | 'waterfalls' | 'terrain' | 'trails' | 'parking' | 'entrances' | 'access' | 'reviews' | 'reports' | 'weather' | 'nearby' | 'history';
 export const DETAIL_META: Record<DetailSectionId, { title: string; icon: string; group: 'top' | 'water' | 'around' | 'community' | 'other' }> = {
   gallery: { title: 'Photo gallery', icon: 'images', group: 'top' }, coordinates: { title: 'GPS coordinates & map', icon: 'location', group: 'other' }, elevation: { title: 'Elevation', icon: 'trending-up', group: 'other' },
   depth: { title: 'Water depth', icon: 'arrow-down', group: 'water' }, clarity: { title: 'Water clarity', icon: 'eye', group: 'water' }, temperature: { title: 'Water temperature', icon: 'thermometer', group: 'water' },
   flow: { title: 'Flow conditions', icon: 'speedometer', group: 'water' }, width: { title: 'Creek width', icon: 'resize', group: 'water' }, waterfalls: { title: 'Nearby waterfalls', icon: 'arrow-down-circle', group: 'around' },
-  terrain: { title: 'Surrounding terrain', icon: 'leaf', group: 'around' }, trails: { title: 'Hiking trails', icon: 'walk', group: 'around' }, parking: { title: 'Parking', icon: 'car', group: 'around' },
+  terrain: { title: 'Surrounding terrain', icon: 'leaf', group: 'around' }, trails: { title: 'Hiking trails', icon: 'walk', group: 'around' }, parking: { title: 'Parking', icon: 'car', group: 'around' }, entrances: { title: 'Access finder — entrances & routes', icon: 'enter', group: 'around' },
   access: { title: 'Access information', icon: 'key', group: 'around' }, reviews: { title: 'Reviews', icon: 'star', group: 'community' }, reports: { title: 'Community reports', icon: 'chatbubbles', group: 'community' },
   weather: { title: 'Weather & safety', icon: 'partly-sunny', group: 'other' }, nearby: { title: 'Nearby locations', icon: 'navigate-circle', group: 'around' }, history: { title: 'Historical visits', icon: 'time', group: 'other' },
 };
@@ -269,7 +276,8 @@ export function sanitizeMapPreset(raw: any, fallbackId = 'map-custom'): MapPrese
     markers: { size: clamp(m.size, 0.6, 1.8, 1), shape: oneOf(m.shape, MARKER_SHAPES, 'circle'), colors },
     layers: { labels: bool(l.labels, true), roads: bool(l.roads, true), trails: bool(l.trails, true), waterways: bool(l.waterways, true), contours: bool(l.contours, false), hillshade: bool(l.hillshade, true) },
     brightness: clamp(raw?.brightness, -0.6, 0.6, 0), defaultZoom: clamp(raw?.defaultZoom, 3, 18, 12), autoCenter: bool(raw?.autoCenter, true),
-    show: { saved: bool(s.saved, true), community: bool(s.community, false), visited: bool(s.visited, false), parking: bool(s.parking, false), hikingTrails: bool(s.hikingTrails, false), nearbyWater: bool(s.nearbyWater, true) },
+    show: { saved: bool(s.saved, true), community: bool(s.community, false), visited: bool(s.visited, false), parking: bool(s.parking, false), hikingTrails: bool(s.hikingTrails, false), nearbyWater: bool(s.nearbyWater, true), customPins: bool(s.customPins, true) },
+    featureStyles: sanitizeFeatureStyles(raw?.featureStyles), overlay: oneOf(raw?.overlay, ['auto', 'on', 'off'] as const, 'auto'), halo: bool(raw?.halo, true),
   };
 }
 
@@ -341,10 +349,10 @@ export function officialProfiles(): AppProfile[] {
 }
 
 /** Everything that is stored/synced/exported. */
-export interface Library { version: number; profiles: AppProfile[]; activeProfileId: string; themes: SavedTheme[]; mapPresets: MapPreset[]; updatedAt: number }
+export interface Library { version: number; profiles: AppProfile[]; activeProfileId: string; themes: SavedTheme[]; mapPresets: MapPreset[]; colorSchemes: ColorScheme[]; updatedAt: number }
 export function defaultLibrary(): Library {
   const std: AppProfile = { id: 'profile-default', name: 'My CreekFinder', icon: 'leaf', settings: DEFAULTS() };
-  return { version: SCHEMA_VERSION, profiles: [std, ...officialProfiles()], activeProfileId: std.id, themes: [], mapPresets: [], updatedAt: 0 };
+  return { version: SCHEMA_VERSION, profiles: [std, ...officialProfiles()], activeProfileId: std.id, themes: [], mapPresets: [], colorSchemes: [], updatedAt: 0 };
 }
 export function sanitizeLibrary(raw: any): Library {
   const d = defaultLibrary();
@@ -357,5 +365,5 @@ export function sanitizeLibrary(raw: any): Library {
   const themes: SavedTheme[] = Array.isArray(raw?.themes) ? raw.themes.slice(0, 60).map((t: any, i: number) => ({ id: str(t?.id, `theme-${i}`, 40), name: str(t?.name, 'Theme', 40), spec: sanitizeTheme(t?.spec) })) : [];
   const mapPresets: MapPreset[] = Array.isArray(raw?.mapPresets) ? raw.mapPresets.slice(0, 60).map((m: any, i: number) => sanitizeMapPreset({ ...m, official: false }, `map-user-${i}`)) : [];
   const active = profiles.some((p) => p.id === raw?.activeProfileId) ? raw.activeProfileId : profiles[0].id;
-  return { version: SCHEMA_VERSION, profiles, activeProfileId: active, themes, mapPresets, updatedAt: typeof raw?.updatedAt === 'number' ? raw.updatedAt : 0 };
+  return { version: SCHEMA_VERSION, profiles, activeProfileId: active, themes, mapPresets, colorSchemes: sanitizeSchemes(raw?.colorSchemes), updatedAt: typeof raw?.updatedAt === 'number' ? raw.updatedAt : 0 };
 }

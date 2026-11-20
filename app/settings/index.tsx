@@ -52,6 +52,7 @@ function Hub() {
       </Group2>
       <Group2 title="Maps & places">
         <NavRow icon="map" title="Map customization" subtitle={`${getMapPreset(s.mapPresetId, lib).name} · ${allMapPresets(lib).length} presets`} onPress={go('/settings/map')} />
+        <NavRow icon="color-fill" title="Map colours" subtitle={`${Object.keys(getMapPreset(s.mapPresetId, lib).featureStyles).length} features customised · trails, water, land, roads, pins`} onPress={go('/settings/mapcolors')} />
         <NavRow icon="water" title="Creek details" subtitle={`${s.detail.layout} layout · ${sections} sections`} onPress={go('/settings/details')} />
         <NavRow icon="folder" title="Saved locations" subtitle={`Sort by ${s.saved.sort} · folders, tags, favorites`} onPress={go('/settings/saved')} />
         <NavRow icon="footsteps" title="GPS tracking" subtitle={`${s.tracking.layout} layout · ${stats} stats`} onPress={go('/settings/tracking')} />
